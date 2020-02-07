@@ -177,7 +177,7 @@ class Output:
     def __init__(self, out_file=None, out_file_type=None):
         self.out_file = out_file
         self.out_file_type = out_file_type
-        self.out_dict = {"errors":{}}
+        self.out_dict = OrderedDict({"errors":{}})
 
     def update(self, content):
         errors_dict = self.out_dict["errors"]
@@ -185,6 +185,7 @@ class Output:
         if "errors" in content:
             errors = {**errors_dict, **content["errors"]}
             self.out_dict["errors"] = errors
+            self.out_dict.move_to_end("errors")
 
         if self.out_file is not None:
             try:
@@ -195,7 +196,7 @@ class Output:
                     f.write(yaml.dump(self.out_dict))
                 f.close()
             except IOError as e:
-                abort(1, f"An error happened tryint go write to {self.out_file}. Exiting.")
+                abort(1, f"An error happened trying go write to {self.out_file}. Exiting.")
 
     def as_dict(self):
         return self.out_dict
@@ -287,9 +288,11 @@ def nmblookup_to_human(nmblookup_result):
     output = []
     nmblookup_result = nmblookup_result.splitlines()
     for line in nmblookup_result:
-        if "Looking up status of" in line:
+        if "Looking up status of" in line or line == "":
             continue
-        match = re.match(r"^\s+(\S+)\s+<(..)>\s+-\s+?(<GROUP>)?\s+?[A-Z]", line)
+
+        line = line.replace("\t","")
+        match = re.match(r"^(\S+)\s+<(..)>\s+-\s+?(<GROUP>)?\s+?[A-Z]", line)
         if match:
             line_val = match.group(1)
             line_code = match.group(2).upper()
@@ -306,8 +309,7 @@ def nmblookup_to_human(nmblookup_result):
                         break
         else:
             output.append(line)
-        retval = '\n'.join(output)
-    return Result(retval, f"Full NetBIOS names information:\n {retval}")
+    return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
 
 def check_session(target, creds):
     '''
