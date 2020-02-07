@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+
 ### DESIGN
 # * Functions:
 #       * return value is None/False     => error happened
@@ -8,19 +9,23 @@
 #                               errors entry in JSON/YAML
 ### PYLINT
 # pylint: disable=C0301
+#
 ### FIXME
 # FIXME: Not sure if the run_something stuff is too crappy,
 # FIXME: equal output for users, groups and rid_cycling
 # FIXME: services via 'net rpc service list -W bla -U % -I ip'
+# FIXME: pylint
 # even if the result is not processed by other functions
 #
 ### CREDITS
-# This tool is rewrite of Mark Lowe's enum4linux.pl (v0.8.3) with python.
-# Credits to him for creating the original tool!
+# This tool is rewrite of Mark Lowe's enum4linux.pl (v0.8.3).
+# Credits to him for creating the original tool. His tool was originally release
+# under GPLv2 or later.
 #
 # Instead of calling polenum, I decided to integrate it in the code. I added comments
 # to the affected functions.
-# Credits to Wh1t3Fox for creating polenum.py!
+# Credits to Wh1t3Fox for creating polenum.py. His tool was originally released
+# under GPLv3. 
 #
 ### LICENSE
 # This tool may be used for legal purposes only.  Users take full responsibility
@@ -28,21 +33,7 @@
 # for damage caused by this tool.  If these terms are not acceptable to you, then
 # you are not permitted to use this tool.
 #
-# In all other respects the GPL version 2 applies:
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc.,
-# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# In all other respects the GPL version 3 applies.
 
 import argparse
 import json
