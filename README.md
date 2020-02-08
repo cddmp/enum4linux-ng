@@ -13,3 +13,11 @@ I'd like to give credit to Mark Lowe for creating the original enum4linux. In ad
 It was lots of fun reading the code. :)
 
 If you use the tool: Please, don't use it for illegal purposes.
+
+## Installing dependencies
+
+  pip install pyyaml python-ldap impacket
+
+or easily install with
+
+  pip install -r requirements.txt
