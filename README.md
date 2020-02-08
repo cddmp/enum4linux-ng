@@ -16,8 +16,8 @@ If you use the tool: Please, don't use it for illegal purposes.
 
 ## Installing dependencies
 
-  pip install pyyaml python-ldap impacket
+  `pip install pyyaml python-ldap impacket`
 
 or easily install with
 
-  pip install -r requirements.txt
+  `pip install -r requirements.txt`
