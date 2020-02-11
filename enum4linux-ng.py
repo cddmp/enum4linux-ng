@@ -732,7 +732,7 @@ def get_group_members_from_name(groupname, target, creds):
     members = []
     for member in members_string.splitlines():
         if "Couldn't lookup SIDs" in member:
-            return Result(None, f"Members lookup failed for group {groupname} due to insufficient user permissions, try a different user")
+            return Result(None, f"Members lookup failed for group '{groupname}' due to insufficient user permissions, try a different user")
         members.append(member)
 
     if members:
