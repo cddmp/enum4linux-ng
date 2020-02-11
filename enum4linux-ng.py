@@ -946,7 +946,7 @@ def samr_init(target, creds):
         dce.connect()
         dce.bind(samr.MSRPC_UUID_SAMR)
     except:
-        return Result((None, None), "DCE/SAMR connect failed")
+        return Result((None, None), f"DCE/SAMR connect failed on port {target.port}/tcp")
 
     resp = samr.hSamrConnect2(dce)
     if resp['ErrorCode'] != 0:
