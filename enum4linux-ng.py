@@ -283,7 +283,7 @@ def run_nmblookup(host):
     nmblookup_result = run(command, "Trying to get NetBIOS names information")
 
     if f"No reply from {host}" in nmblookup_result:
-        return Result(None, "Cannot get NetBIOS names information via nmblookup: host does not reply")
+        return Result(None, "Could not get NetBIOS names information via nmblookup: host does not reply")
     return Result(nmblookup_result, "")
 
 def get_workgroup_from_nmblookup(nmblookup_result):
@@ -297,7 +297,7 @@ def get_workgroup_from_nmblookup(nmblookup_result):
         else:
             return Result(None, f"Workgroup {workgroup} contains some illegal characters")
     else:
-        return Result(None, "Cannot find workgroup/domain")
+        return Result(None, "Could not find workgroup/domain")
     return Result(workgroup, f"Got domain/workgroup name: {workgroup}")
 
 def nmblookup_to_human(nmblookup_result):
@@ -431,7 +431,7 @@ def get_long_domain(namingcontexts_result):
             break
     if long_domain:
         return Result(long_domain, f"Long domain name is: {long_domain}")
-    return Result(None, "Cannot find long domain")
+    return Result(None, "Could not find long domain")
 
 def run_lsaquery(target, creds):
     '''
@@ -444,11 +444,11 @@ def run_lsaquery(target, creds):
     lsaquery_result = run(command, "Attempting to get domain SID")
 
     if "NT_STATUS_LOGON_FAILURE" in lsaquery_result:
-        return Result(None, "Cannot get domain information via lsaquery: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not get domain information via lsaquery: NT_STATUS_LOGON_FAILURE")
 
     if lsaquery_result:
         return Result(lsaquery_result, "")
-    return Result(None, "Cannot get information via lsaquery")
+    return Result(None, "Could not get information via lsaquery")
 
 def check_is_part_of_workgroup_or_domain(lsaquery_result):
     '''
@@ -459,7 +459,7 @@ def check_is_part_of_workgroup_or_domain(lsaquery_result):
         return Result("workgroup", "[+] Host is part of a workgroup (not a domain)")
     if re.search(r"Domain Sid: S-\d+-\d+-\d+-\d+-\d+-\d+", lsaquery_result):
         return Result("domain", "Host is part of a domain (not a workgroup)")
-    return Result(False, "Cannot determine if host is part of domain or part of a workgroup")
+    return Result(False, "Could not determine if host is part of domain or part of a workgroup")
 
 def get_workgroup_from_lsaquery(lsaquery_result):
     '''
@@ -474,7 +474,7 @@ def get_workgroup_from_lsaquery(lsaquery_result):
 
     if workgroup:
         return Result(workgroup, f"Domain: {workgroup}")
-    return Result(None, "Cannot get workgroup from lsaquery")
+    return Result(None, "Could not get workgroup from lsaquery")
 
 def get_domain_sid_from_lsaquery(lsaquery_result):
     '''
@@ -486,7 +486,7 @@ def get_domain_sid_from_lsaquery(lsaquery_result):
         domain_sid = match.group(1)
     if domain_sid:
         return Result(domain_sid, f"SID: {domain_sid}")
-    return Result(None, "Cannot get domain SID from lsaquery")
+    return Result(None, "Could not get domain SID from lsaquery")
 
 def run_srvinfo(target, creds):
     '''
@@ -508,9 +508,9 @@ def run_srvinfo(target, creds):
     srvinfo_result = run(command, "Attempting to get OS info with command")
 
     if "NT_STATUS_ACCESS_DENIED" in srvinfo_result:
-        return Result(None, "Cannot get OS info with srvinfo: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not get OS info with srvinfo: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in srvinfo_result:
-        return Result(None, "Cannot get OS info with srvinfo: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not get OS info with srvinfo: NT_STATUS_LOGON_FAILURE")
     return Result(srvinfo_result, "")
 
 # FIXME: Evaluate server_type_string
@@ -536,7 +536,7 @@ def get_os_info(srvinfo_result):
                 search_pattern = search_pattern.replace(" ", "_")
                 os_info[search_pattern] = match.group(1)
     if not os_info:
-        return Result(None, "Couldn't get OS information")
+        return Result(None, "Could not get OS information")
 
     retmsg = "The following OS information were found:\n"
     for key, value in os_info.items():
@@ -554,9 +554,9 @@ def run_querydispinfo(target, creds):
     querydispinfo_result = run(command, "Attempting to get userlist")
 
     if "NT_STATUS_ACCESS_DENIED" in querydispinfo_result:
-        return Result(None, "Couldn't find users using querydispinfo: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not find users using querydispinfo: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in querydispinfo_result:
-        return Result(None, "Couldn't find users using querydispinfo: NT_STATUS_INVALID_PARAMETER")
+        return Result(None, "Could not find users using querydispinfo: NT_STATUS_INVALID_PARAMETER")
     return Result(querydispinfo_result, "")
 
 def run_enumdomusers(target, creds):
@@ -570,9 +570,9 @@ def run_enumdomusers(target, creds):
     enumdomusers_result = run(command, "Attempting to get userlist")
 
     if "NT_STATUS_ACCESS_DENIED" in enumdomusers_result:
-        return Result(None, "Couldn't find users using enumdomusers: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not find users using enumdomusers: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in enumdomusers_result:
-        return Result(None, "Couldn't find users using enumdomusers: NT_STATUS_INVALID_PARAMETER")
+        return Result(None, "Could not find users using enumdomusers: NT_STATUS_INVALID_PARAMETER")
     return Result(enumdomusers_result, "")
 
 def enum_users_from_querydispinfo(target, creds):
@@ -598,7 +598,7 @@ def enum_users_from_querydispinfo(target, creds):
             description = match.group(5)
             users[rid] = OrderedDict({"username":username, "name":name, "acb":acb, "description":description})
         else:
-            return Result(None, "Couldn't extract users from querydispinfo output")
+            return Result(None, "Could not extract users from querydispinfo output")
     if users:
         return Result(users, f"Found {len(users.keys())} via 'querydispinfo'")
     return Result(users, "Got an empty response, there are no users (this is not an error, there seem to be really none)")
@@ -623,7 +623,7 @@ def enum_users_from_enumdomusers(target, creds):
             rid = str(int(rid, 16))
             users[rid] = {"username":username}
         else:
-            return Result(None, "Couldn't extract users from eumdomusers output")
+            return Result(None, "Could not extract users from eumdomusers output")
     if users:
         return Result(users, f"Found {len(users.keys())} via 'enumdomusers'")
     return Result(users, "Got an empty response, there are no users (this is not an error, there seem to be really none)")
@@ -661,7 +661,7 @@ def get_user_details_from_rid(rid, target, creds):
                     details[CONST_ACB_DICT[key]] = False
 
         return Result(details, f"Found user details for user with RID {rid}")
-    return Result(details, f"Couldn't find user details for user with RID {rid}")
+    return Result(details, f"Could not find user details for user with RID {rid}")
 
 def run_enum_groups(grouptype, target, creds):
     '''
@@ -681,7 +681,7 @@ def run_enum_groups(grouptype, target, creds):
     groups_string = run(command, f"Attempting to get {grouptype} groups")
 
     if "error: NT_STATUS_ACCESS_DENIED" in groups_string:
-        return Result(None, f"Cannot get groups via {grouptype_dict[grouptype]}: NT_STATUS_ACCESS_DENIED")
+        return Result(None, f"Could not get groups via {grouptype_dict[grouptype]}: NT_STATUS_ACCESS_DENIED")
     return Result(groups_string, "")
 
 def enum_groups(grouptype, target, creds):
@@ -705,7 +705,7 @@ def enum_groups(grouptype, target, creds):
 
     match = re.search("(group:.*)", enum.retval, re.DOTALL)
     if not match:
-        return Result(None, f"Cannot parse result of {grouptype_dict[grouptype]} command")
+        return Result(None, f"Could not parse result of {grouptype_dict[grouptype]} command")
 
     # Example output of rpcclient's group commands:
     # group:[RAS and IAS Servers] rid:[0x229]
@@ -717,7 +717,7 @@ def enum_groups(grouptype, target, creds):
             rid = str(int(rid, 16))
             groups[rid] = {"groupname":groupname, "type":grouptype}
         else:
-            return Result(None, f"Couldn't extract groups from {grouptype_dict[grouptype]} output")
+            return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output")
     if groups:
         return Result(groups, f"Found {len(groups.keys())} groups via '{grouptype_dict[grouptype]}'")
     return Result(groups, "Got an empty response, there are no groups (this is not an error, there seem to be really none)")
@@ -737,7 +737,7 @@ def get_group_members_from_name(groupname, target, creds):
 
     if members:
         return Result(','.join(members), f"Found {len(members)} member(s) for group '{groupname}'")
-    return Result('', f"Couldn't find members for group '{groupname}'")
+    return Result('', f"Could not find members for group '{groupname}'")
 
 def get_group_details_from_rid(rid, target, creds):
     '''
@@ -764,7 +764,7 @@ def get_group_details_from_rid(rid, target, creds):
                 details[line] = ""
 
         return Result(details, f"Found group details for group with RID {rid}")
-    return Result(details, f"Couldn't find group details for group with RID {rid}")
+    return Result(details, f"Could not find group details for group with RID {rid}")
 
 def check_share_access(share, target, creds):
     '''
@@ -794,7 +794,7 @@ def check_share_access(share, target, creds):
         return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
 
     # FIXME: Here we might get an NT_STATUS_OBJECT_NAME_NOT_FOUND
-    return Result(None, "Cannot understand smbclient response")
+    return Result(None, "Could not understand smbclient response")
 
 def enum_shares(target, creds):
     '''
@@ -809,7 +809,7 @@ def enum_shares(target, creds):
     shares_result = run(command, "Attempting to get share list using authentication")
 
     if "NT_STATUS_ACCESS_DENIED" in shares_result:
-        return Result(None, "Cannot list shares: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not list shares: NT_STATUS_ACCESS_DENIED")
 
     shares = {}
     match_list = re.findall(r"\n\s*([ \S]+?)\s+(?:Disk|IPC|Printer)", shares_result, re.IGNORECASE)
@@ -856,7 +856,7 @@ def enum_sids(users, target, creds):
 
     if sids:
         return Result(sids, f"Found {len(sids)} SIDs")
-    return Result(None, "Couldn't get any SIDs")
+    return Result(None, "Could not get any SIDs")
 
 def prepare_rid_ranges(rid_ranges):
     '''
@@ -930,7 +930,7 @@ def enum_printers(target, creds):
         if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
             return Result("", f"No printer available")
         if "NT_STATUS_ACCESS_DENIED" in printer_info:
-            return Result(None, f"Cannot get printer info: NT_STATUS_ACCESS_DENIED")
+            return Result(None, f"Could not get printer info: NT_STATUS_ACCESS_DENIED")
         return Result(printer_info, f"Got printer info:\n{printer_info}")
     return Result(None, f"No printer info found")
 
@@ -1531,7 +1531,7 @@ def valid_shares_file(shares_file):
                     fault_shares.append(f"line {line_num}:{share}")
                 line_num += 1
     except:
-        return Result(False, f"Cannot open shares file {shares_file}")
+        return Result(False, f"Could not open shares file {shares_file}")
     if fault_shares:
         return Result(False, f"These shares contain illegal characters:\n{NL.join(fault_shares)}")
     return Result(True, "")
