@@ -193,9 +193,20 @@ class Output:
         self.out_dict = OrderedDict({"errors":{}})
 
     def update(self, content):
+        # The following is needed, since python3 does not support nested merge of
+        # dictionaries out of the box:
+        # Temporarily save the "errors" sub dict. This will make sure we don't lose
+        # any errors from previous module runs.
         errors_dict = self.out_dict["errors"]
+        # Overwrite all sub dicts in out_dict (e.g. "users" or "groups") with the
+        # updated ones. Here we would normally lose all errors, if "content" had
+        # an "errors" dict.
         self.out_dict.update(content)
+        # Make sure "errors" is the last sub dict in out_dict. This is just needed
+        # for nice JSON/YAML output.
         self.out_dict.move_to_end("errors")
+        # Finally check, did the last module run produce errors?
+        # If so, merge the error dicts and append the result to out_dict.
         if "errors" in content:
             errors = {**errors_dict, **content["errors"]}
             self.out_dict["errors"] = errors
@@ -216,7 +227,7 @@ class Output:
 
 class RidCycleParams:
     '''
-    Stores the various parameters needed for RID cycling. RID Range and known_usernames are mandatory.
+    Stores the various parameters needed for RID cycling. rid_ranges and known_usernames are mandatory.
     enumerated_input is a dictionary which contains already enumerated input like "users,
     "groups", "machines" and/or a domain sid. By default enumerated_input is an empty dict
     and will be filled up during the tool run.
@@ -225,11 +236,34 @@ class RidCycleParams:
         self.rid_ranges = rid_ranges
         self.known_usernames = known_usernames
         self.enumerated_input = {}
+
+    def set_enumerated_input(self, enum_input):
         for key in ["users", "groups", "machines"]:
-            if key not in self.enumerated_input:
+            if key in enum_input:
+                self.enumerated_input[key] = enum_input[key]
+            else:
                 self.enumerated_input[key] = {}
-        if "domain_sid" not in self.enumerated_input:
+
+        if "domain_sid" in enum_input:
+            self.enumerated_input["domain_sid"] = enum_input["domain_sid"]
+        else:
             self.enumerated_input["domain_sid"] = ""
+
+class ShareBruteParams:
+    '''
+    Stores the various parameters needed for Share Bruteforcing. shares_file is mandatory.
+    enumerated_input is a dictionary which contains already enumerated shares. By default
+    enumerated_input is an empty dict and will be filled up during the tool run.
+    '''
+    def __init__(self, shares_file):
+        self.shares_file = shares_file
+        self.enumerated_input = {}
+
+    def set_enumerated_input(self, enum_input):
+        if "shares" in enum_input:
+            self.enumerated_input["shares"] = enum_input["shares"]
+        else:
+            self.enumerated_input["shares"] = {}
 
 def print_heading(text):
     output = f"|    {text}    |"
@@ -818,7 +852,7 @@ def enum_shares(target, creds):
             shares[share] = {}
 
     if shares:
-        return Result(shares, f"Found {len(shares.keys())} shares: {','.join(shares.keys())}")
+        return Result(shares, f"Found {len(shares.keys())} share(s): {','.join(shares.keys())}")
     return Result(None, f"No shares found for user '{creds.user}' with password '{creds.pw}', try a different user")
 
 def enum_sids(users, target, creds):
@@ -1405,7 +1439,7 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
     if found_count["users"] == 0 and found_count["groups"] == 0 and found_count["machines"] == 0:
         output = process_error(f"Could not find any (new) users, (new) groups or (new) machines", module_name, output)
     else:
-        print_success(f"Found {found_count['users']} user(s), {found_count['groups']} group(s), {found_count['machines']} machine(s)")
+        print_success(f"Found {found_count['users']} user(s), {found_count['groups']} group(s), {found_count['machines']} machine(s) in total")
 
     return output
 
@@ -1439,27 +1473,38 @@ def run_module_enum_shares(target, creds):
     output["shares"] = shares
     return output
 
-def run_module_bruteforce_shares(shares_file, target, creds):
+def run_module_bruteforce_shares(brute_params, target, creds):
     '''
     Run module bruteforce shares.
     '''
     module_name = "bruteforce_shares"
     print_heading(f"Share bruteforcing on {target.host}")
-    output = {}
-    shares = {}
+    output = brute_params.enumerated_input
 
+    found_count = 0
     try:
-        with open(shares_file) as f:
+        with open(brute_params.shares_file) as f:
             for share in f:
                 share = share.rstrip()
+
+                # Skip all shares we might have found by the enum_shares module already
+                if share in output["shares"].keys():
+                    continue
+
                 result = check_share_access(share, target, creds)
                 if result.retval:
-                    print_success(f"Found share: {share}\n\t{result.retmsg}")
-                    shares[share] = result.retmsg
+                    print_success(f"Found share: {share}")
+                    print_success(result.retmsg)
+                    output["shares"][share] = result.retval
+                    found_count += 1
     except:
         output = process_error(f"Failed to open {shares_file}", module_name, output)
 
-    output["shares"] = shares
+    if found_count == 0:
+        output = process_error(f"Could not find any (new) shares", module_name, output)
+    else:
+        print_success(f"Found {found_count} (new) share(s) in total")
+
     return output
 
 def run_module_enum_policy(target, creds):
@@ -1661,6 +1706,9 @@ def main():
         rid_ranges = prepare_rid_ranges(args.ranges)
         cycle_params = RidCycleParams(rid_ranges, args.users)
 
+    if args.shares_file:
+        share_brute_params = ShareBruteParams(args.shares_file)
+
     print_heading("Target Information")
     print_info(f"Target ........... {target.host}")
     print_info(f"Username ......... '{creds.user}'")
@@ -1724,15 +1772,14 @@ def main():
 
     # RID Cycling (= bruteforce users, groups and machines)
     if args.R:
-        for key in ["domain_sid", "users", "groups", "machines"]:
-            if key in output.as_dict():
-                cycle_params.enumerated_input[key] = output.as_dict()[key]
+        cycle_params.set_enumerated_input(output.as_dict())
         result = run_module_rid_cycling(cycle_params, target, creds, args.d)
         output.update(result)
 
     # Brute force shares
     if args.shares_file:
-        result = run_module_bruteforce_shares(args.shares_file, target, creds)
+        share_brute_params.set_enumerated_input(output.as_dict())
+        result = run_module_bruteforce_shares(share_brute_params, target, creds)
         output.update(result)
 
     elapsed_time = time() - start_time
