@@ -1613,7 +1613,8 @@ def check_args(argv):
 
     parser = argparse.ArgumentParser(argv)
     parser.add_argument("host")
-    parser.add_argument("-A", action="store_true", help="Do all simple enumeration (-U -G -S -P -R -O -N -I). This option is enabled if you don't provide any other option.")
+    parser.add_argument("-A", action="store_true", help="Do all simple enumeration including nmblookup (-U -G -S -P -O -N -I). This option is enabled if you don't provide any other option.")
+    parser.add_argument("-As", action="store_true", help="Do all simple short enumeration without nmblookup (-U -G -S -P -O -I)")
     parser.add_argument("-U", action="store_true", help="Get userlist")
     parser.add_argument("-G", action="store_true", help="Get groups")
     parser.add_argument("-Gm", action="store_true", help="Get groups and member list")
@@ -1717,7 +1718,7 @@ def main():
     print_info(f"Known Usernames .. '{args.users}'")
 
     # Checks if host is a parent/child domain controller, try to get long domain name
-    if args.L or args.A:
+    if args.L or args.A or args.As:
         result = run_module_ldapsearch(target)
         output.update(result)
 
@@ -1741,32 +1742,32 @@ def main():
     output.update(result)
 
     # Get OS information like os version, server type string...
-    if args.O or args.A:
+    if args.O or args.A or args.As:
         result = run_module_srvinfo(target, creds)
         output.update(result)
 
     # Enum users
-    if args.U or args.A:
+    if args.U or args.A or args.As:
         result = run_module_enum_users(target, creds, args.d)
         output.update(result)
 
     # Enum groups
-    if args.G or args.Gm or args.A:
+    if args.G or args.Gm or args.A or args.As:
         result = run_module_enum_groups(target, creds, args.Gm, args.d)
         output.update(result)
 
     # Enum shares
-    if args.S or args.A:
+    if args.S or args.A or args.As:
         result = run_module_enum_shares(target, creds)
         output.update(result)
 
     # Enum password policy
-    if args.P or args.A:
+    if args.P or args.A or args.As:
         result = run_module_enum_policy(target, creds)
         output.update(result)
 
     # Enum printers
-    if args.I or args.A:
+    if args.I or args.A or args.As:
         result = run_module_enum_printers(target, creds)
         output.update(result)
 
