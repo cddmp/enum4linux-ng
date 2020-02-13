@@ -1029,8 +1029,11 @@ def enum_policy(target, creds):
     dce, domain_handle = result.retval
 
     # Password policy
-    domain_passwd = samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
-    result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_passwd)
+    try:
+        domain_passwd = samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
+        result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_passwd)
+    except:
+        return Result(None, "Could not get domain password policy: RPC SamrQueryInformationDomain2() failed")
 
     policy["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
     policy["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
@@ -1043,15 +1046,23 @@ def enum_policy(target, creds):
             policy["pw_properties"].append(CONST_DOMAIN_FIELDS[bitmask])
 
     # Domain lockout
-    domain_lockout = samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
-    result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_lockout)
+    try:
+        domain_lockout = samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
+        result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_lockout)
+    except:
+        return Result(None, "Could not get domain lockout policy: RPC SamrQueryInformationDomain2() failed")
+
     policy["lockout_observation_window"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
     policy["lockout_duration"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
     policy["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
 
     # Domain logoff
-    domain_logoff = samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation
-    result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
+    try:
+        domain_logoff = samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation
+        result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
+    except:
+        return Result(None, "Could not get domain logoff policy: RPC SamrQueryInformationDomain2() failed")
+
     policy["force_logoff_time"] = policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
 
     return Result(policy, f"Found policy:\n{yaml.dump(policy).rstrip()}")
