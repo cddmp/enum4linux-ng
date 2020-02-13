@@ -481,6 +481,8 @@ def run_lsaquery(target, creds):
 
     if "NT_STATUS_LOGON_FAILURE" in lsaquery_result:
         return Result(None, "Could not get domain information via lsaquery: NT_STATUS_LOGON_FAILURE")
+    if "NT_STATUS_ACCESS_DENIED" in lsaquery_result:
+        return Result(None, "Could not get domain information via lsaquery: NT_STATUS_ACCESS_DENIED")
 
     if lsaquery_result:
         return Result(lsaquery_result, "")
