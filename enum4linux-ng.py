@@ -42,6 +42,7 @@
 import argparse
 import json
 import os
+import random
 import re
 import shutil
 import shlex
@@ -179,6 +180,8 @@ class Credentials:
     Stores username and password.
     '''
     def __init__(self, user, pw):
+        # Create an alternative user with pseudo-random username
+        self.random_user = ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(8))
         self.user = user
         self.pw = pw
 
@@ -366,7 +369,7 @@ def nmblookup_to_human(nmblookup_result):
             output.append(line)
     return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
 
-def check_session(target, creds):
+def check_session(target, creds, random_user_session=False):
     '''
     Tests access to the IPC$ share.
 
@@ -386,12 +389,18 @@ def check_session(target, creds):
     'case_senstive'. We search for this command as an indicator that the IPC session was setup correctly.
     '''
 
-    command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{creds.user}%{creds.pw}', '-c', 'help']
-    session_output = run(command, "Attempting to make session")
-
-    session_type = "user"
-    if not creds.user and not creds.pw:
+    if random_user_session:
+        user = creds.random_user
+        session_type = "random user"
+    elif not creds.user and not creds.pw:
         session_type = "null"
+        user = creds.user
+    else:
+        session_type = "user"
+        user = creds.user
+
+    command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{user}%{creds.pw}', '-c', 'help']
+    session_output = run(command, "Attempting to make session")
 
     match = re.search(r"do_connect:.*failed\s\(Error\s([^)]+)\)", session_output)
     if match:
@@ -399,8 +408,8 @@ def check_session(target, creds):
         return Result(None, f"Server connection failed for {session_type} session: {error_code}")
 
     if "case_sensitive" in session_output:
-        return Result(True, f"Server allows session using username '{creds.user}', password '{creds.pw}'")
-    return Result(False, f"Server doesn't allow session using username '{creds.user}', password '{creds.pw}'")
+        return Result(True, f"Server allows session using username '{user}', password '{creds.pw}'")
+    return Result(False, f"Server doesn't allow session using username '{user}', password '{creds.pw}'")
 
     #FIXME: The code snippet below is a 1:1 translation from the original perl code.
     #       I tested the code against various machines. The smbclient command output
@@ -1201,9 +1210,21 @@ def run_module_session_check(target, creds):
         else:
             output = process_error(user_session.retmsg, module_name, output)
 
+    # Check random user session
+    print_info(f"Check for random user session")
+    output["random_user_session_possible"] = False
+    user_session = check_session(target, creds, random_user_session=True)
+    if user_session.retval:
+        output["random_user_session_possible"] = True
+        print_success(user_session.retmsg)
+        print_success(f"Re-running enumeration with user '{creds.random_user}' might give more results.")
+    else:
+        output = process_error(user_session.retmsg, module_name, output)
+
     output["sessions_possible"] = False
     if ("null_session_possible" in output and output["null_session_possible"]) or \
-        ("user_session_possible" in output and output["user_session_possible"]):
+        ("user_session_possible" in output and output["user_session_possible"]) or \
+        ("random_user_session_possible" in output and output["random_user_session_possible"]):
         output["sessions_possible"] = True
 
     return output
@@ -1759,6 +1780,7 @@ def main():
     print_heading("Target Information")
     print_info(f"Target ........... {target.host}")
     print_info(f"Username ......... '{creds.user}'")
+    print_info(f"Random Username .. '{creds.random_user}'")
     print_info(f"Password ......... '{creds.pw}'")
     print_info(f"RID Range(s) ..... {args.ranges}")
     print_info(f"Known Usernames .. '{args.users}'")
