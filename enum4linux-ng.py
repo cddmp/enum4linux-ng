@@ -1141,6 +1141,7 @@ def run(command, description=""):
     output = output.decode()
     # Workaround for Samba bug (see https://bugzilla.samba.org/show_bug.cgi?id=13925)
     output = output.replace("Unable to initialize messaging context\n", "")
+    output = output.replace("WARNING: no network interfaces found\n", "")
     output = output.rstrip('\n')
     return output
 
