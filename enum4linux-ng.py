@@ -140,6 +140,7 @@ CONST_DOMAIN_FIELDS = {
 CONST_DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
 CONST_RID_RANGES = "500-550,1000-1050"
 CONST_KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
+CONST_TIMEOUT = 2
 
 # global_verbose is the only global variable which should be written to
 global_verbose = False
@@ -166,10 +167,11 @@ class Target:
     Target encapsulated target information like host name or ip, workgroup name, port number
     or whether Transport Layer Security (TLS) is used or not.
     '''
-    def __init__(self, host, workgroup, port=None, tls=None):
+    def __init__(self, host, workgroup, port=None, timeout=None, tls=None):
         self.host = host
         self.port = port
         self.workgroup = workgroup
+        self.timeout = timeout
         self.tls = tls
 
 class Credentials:
@@ -416,7 +418,7 @@ def get_namingcontexts(target):
     the so called Root Directory Server Agent Service Entry (RootDSE).
     '''
     try:
-        server = Server(target.host, use_ssl=target.tls, get_info=DSA, connect_timeout=3)
+        server = Server(target.host, use_ssl=target.tls, get_info=DSA, connect_timeout=target.timeout)
         ldap_con = Connection(server, auto_bind=True)
         ldap_con.unbind()
     except Exception as e:
@@ -1544,6 +1546,14 @@ def run_module_enum_printers(target, creds):
         output["printers"] = enum.retval
     return output
 
+def valid_timeout(timeout):
+    try:
+        timeout = int(timeout)
+        if timeout >= 0:
+            return True
+    except:
+        return False
+
 def valid_rid_ranges(rid_ranges):
     if not rid_ranges:
         return False
@@ -1633,6 +1643,7 @@ def check_args(argv):
     parser.add_argument("-k", dest="users", default=CONST_KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {CONST_KNOWN_USERNAMES}.\nUsed to get sid with "lookupsid known_username"')
     parser.add_argument("-r", dest="ranges", default=CONST_RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {CONST_RID_RANGES}, implies -r")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for share names")
+    parser.add_argument("-t", dest="timeout", default=CONST_TIMEOUT, help=f"Sets connection timeout in seconds, affects -L (default: {CONST_TIMEOUT}s)")
     parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file")
     parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full commands being run (net, rpcclient, etc.)")
@@ -1668,6 +1679,11 @@ def check_args(argv):
     if args.user and args.user not in args.users.split(","):
         args.users += f",{args.user}"
 
+    # Check timeout
+    if not valid_timeout(args.timeout):
+        abort(1, "Timeout must be a valid integer equal or greater zero.")
+    args.timeout = int(args.timeout)
+
     return args
 
 def check_dependencies():
@@ -1701,7 +1717,7 @@ def main():
         output = Output()
 
     creds = Credentials(args.user, args.pw)
-    target = Target(args.host, args.workgroup)
+    target = Target(args.host, args.workgroup, timeout=args.timeout)
 
     if args.R:
         rid_ranges = prepare_rid_ranges(args.ranges)
