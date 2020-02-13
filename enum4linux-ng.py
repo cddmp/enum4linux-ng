@@ -994,6 +994,7 @@ def samr_init(target, creds):
     Tries to connect to the SAMR named pipe and get the domain handle.
     '''
     rpctransport = transport.SMBTransport(target.host, target.port, r'\samr', creds.user, creds.pw)
+    rpctransport.set_connect_timeout(target.timeout)
     try:
         dce = DCERPC_v5(rpctransport)
         dce.connect()
