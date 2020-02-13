@@ -975,6 +975,8 @@ def enum_printers(target, creds):
             return Result(None, f"Could not get printer info: NT_STATUS_ACCESS_DENIED")
         if "NT_STATUS_LOGON_FAILURE" in printer_info:
             return Result(None, f"Could not get printer info: NT_STATUS_LOGON_FAILURE")
+        if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
+            return Result(None, f"Could not get printer info: NT_STATUS_HOST_UNREACHABLE")
         return Result(printer_info, f"Got printer info:\n{printer_info}")
     return Result(None, f"No printer info found")
 
