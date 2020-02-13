@@ -593,6 +593,8 @@ def run_querydispinfo(target, creds):
         return Result(None, "Could not find users using querydispinfo: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in querydispinfo_result:
         return Result(None, "Could not find users using querydispinfo: NT_STATUS_INVALID_PARAMETER")
+    if "NT_STATUS_LOGON_FAILURE" in querydispinfo_result:
+        return Result(None, "Could not find users using querydispinfo: NT_STATUS_LOGON_FAILURE")
     return Result(querydispinfo_result, "")
 
 def run_enumdomusers(target, creds):
@@ -609,6 +611,8 @@ def run_enumdomusers(target, creds):
         return Result(None, "Could not find users using enumdomusers: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in enumdomusers_result:
         return Result(None, "Could not find users using enumdomusers: NT_STATUS_INVALID_PARAMETER")
+    if "NT_STATUS_LOGON_FAILURE" in enumdomusers_result:
+        return Result(None, "Could not find users using enumdomusers: NT_STATUS_LOGON_FAILURE")
     return Result(enumdomusers_result, "")
 
 def enum_users_from_querydispinfo(target, creds):
@@ -716,8 +720,10 @@ def run_enum_groups(grouptype, target, creds):
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"{grouptype_dict[grouptype]}"]
     groups_string = run(command, f"Attempting to get {grouptype} groups")
 
-    if "error: NT_STATUS_ACCESS_DENIED" in groups_string:
+    if "NT_STATUS_ACCESS_DENIED" in groups_string:
         return Result(None, f"Could not get groups via {grouptype_dict[grouptype]}: NT_STATUS_ACCESS_DENIED")
+    if "NT_STATUS_LOGON_FAILURE" in groups_string:
+        return Result(None, f"Could not get groups via {grouptype_dict[grouptype]}: NT_STATUS_LOGON_FAILURE")
     return Result(groups_string, "")
 
 def enum_groups(grouptype, target, creds):
