@@ -391,15 +391,18 @@ def check_session(target, creds, random_user_session=False):
 
     if random_user_session:
         user = creds.random_user
+        pw = ''
         session_type = "random user"
     elif not creds.user and not creds.pw:
+        user = ''
+        pw = ''
         session_type = "null"
-        user = creds.user
     else:
-        session_type = "user"
         user = creds.user
+        pw = creds.pw
+        session_type = "user"
 
-    command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{user}%{creds.pw}', '-c', 'help']
+    command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
     session_output = run(command, "Attempting to make session")
 
     match = re.search(r"do_connect:.*failed\s\(Error\s([^)]+)\)", session_output)
@@ -408,8 +411,8 @@ def check_session(target, creds, random_user_session=False):
         return Result(None, f"Server connection failed for {session_type} session: {error_code}")
 
     if "case_sensitive" in session_output:
-        return Result(True, f"Server allows session using username '{user}', password '{creds.pw}'")
-    return Result(False, f"Server doesn't allow session using username '{user}', password '{creds.pw}'")
+        return Result(True, f"Server allows session using username '{user}', password '{pw}'")
+    return Result(False, f"Server doesn't allow session using username '{user}', password '{pw}'")
 
     #FIXME: The code snippet below is a 1:1 translation from the original perl code.
     #       I tested the code against various machines. The smbclient command output
