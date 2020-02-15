@@ -771,7 +771,7 @@ def enum_groups(grouptype, target, creds):
             groupname = match.group(1)
             rid = match.group(2)
             rid = str(int(rid, 16))
-            groups[rid] = {"groupname":groupname, "type":grouptype}
+            groups[rid] = OrderedDict({"groupname":groupname, "type":grouptype})
         else:
             return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output")
     if groups:
