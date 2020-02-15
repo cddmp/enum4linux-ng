@@ -703,6 +703,8 @@ def get_user_details_from_rid(rid, target, creds):
             if ':' in line:
                 (key, value) = line.split(":", 1)
                 key = key.rstrip()
+                if "User Name" in key or "Full Name" in key:
+                    continue
                 details[key] = value
             else:
                 details[line] = ""
@@ -815,6 +817,8 @@ def get_group_details_from_rid(rid, target, creds):
         for line in group_info.splitlines():
             if ':' in line:
                 (key, value) = line.split(":", 1)
+                if "Group Name" in key:
+                    continue
                 details[key] = value
             else:
                 details[line] = ""
