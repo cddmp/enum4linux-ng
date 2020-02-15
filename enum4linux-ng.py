@@ -1019,7 +1019,10 @@ def samr_init(target, creds):
     except:
         return Result((None, None), f"DCE/SAMR connect failed on port {target.port}/tcp")
 
-    resp = samr.hSamrConnect2(dce)
+    try:
+        resp = samr.hSamrConnect2(dce)
+    except:
+        return Result((None, None), "SamrConnect failed")
     if resp['ErrorCode'] != 0:
         return Result((None, None), "SamrConnect failed")
 
