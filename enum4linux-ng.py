@@ -703,6 +703,7 @@ def get_user_details_from_rid(rid, target, creds):
             if ':' in line:
                 (key, value) = line.split(":", 1)
                 key = key.rstrip()
+                # Skip user and full name, we have this information already
                 if "User Name" in key or "Full Name" in key:
                     continue
                 details[key] = value
@@ -817,6 +818,7 @@ def get_group_details_from_rid(rid, target, creds):
         for line in group_info.splitlines():
             if ':' in line:
                 (key, value) = line.split(":", 1)
+                # Skip group name, we have this information already
                 if "Group Name" in key:
                     continue
                 details[key] = value
@@ -869,7 +871,6 @@ def enum_shares(target, creds):
     For the list of resulting shares, smbclient is used again with the "dir" command. In the background this will
     send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
     '''
-    # FIXME: Test: net rpc share -W 'workgroup' -I host -U'user%pw'
     command = ["smbclient", "-W", target.workgroup, "-L", f"//{target.host}", "-U", f"{creds.user}%{creds.pw}"]
     shares_result = run(command, "Attempting to get share list using authentication")
 
