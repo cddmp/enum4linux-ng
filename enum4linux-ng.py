@@ -27,6 +27,7 @@
 # FIXME: Not sure if the run_something stuff is too crappy,
 # FIXME: equal output for users, groups and rid_cycling
 # FIXME: services via 'net rpc service list -W bla -U % -I ip'
+# FIXME: Handle NT_STATUS... message in one function
 #
 ### LICENSE
 # This tool may be used for legal purposes only.  Users take full responsibility
@@ -984,25 +985,35 @@ def rid_cycle(sid, rid_ranges, target, creds):
                 elif "(9)" in sid_and_user:
                     yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine {entry}")
 
-#FIXME: Parse output - need to setup test env.
 def enum_printers(target, creds):
     '''
     Tries to enum printer via rpcclient's enumprinters.
     '''
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", "enumprinters", target.host]
     printer_info = run(command, "Attempting to get printer info")
+    printers = {}
 
-    if printer_info:
-        if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
-            return Result("", f"No printer available")
-        if "NT_STATUS_ACCESS_DENIED" in printer_info:
-            return Result(None, f"Could not get printer info: NT_STATUS_ACCESS_DENIED")
-        if "NT_STATUS_LOGON_FAILURE" in printer_info:
-            return Result(None, f"Could not get printer info: NT_STATUS_LOGON_FAILURE")
-        if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
-            return Result(None, f"Could not get printer info: NT_STATUS_HOST_UNREACHABLE")
-        return Result(printer_info, f"Got printer info:\n{printer_info}")
-    return Result(None, f"No printer info found")
+    if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
+        return Result("", f"No printer available")
+    if "NT_STATUS_ACCESS_DENIED" in printer_info:
+        return Result(None, f"Could not get printer info: NT_STATUS_ACCESS_DENIED")
+    if "NT_STATUS_LOGON_FAILURE" in printer_info:
+        return Result(None, f"Could not get printer info: NT_STATUS_LOGON_FAILURE")
+    if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
+        return Result(None, f"Could not get printer info: NT_STATUS_HOST_UNREACHABLE")
+
+    match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", printer_info, re.MULTILINE)
+    if not match_list:
+        return Result(None, f"Could not parse result of enumprinters command")
+
+    for match in match_list:
+        flags = match[0]
+        name = match[1]
+        description = match[2]
+        comment = match[3]
+        printers[name] = OrderedDict({ "description":description, "comment":comment, "flags":flags})
+
+    return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yaml.dump(printers).rstrip()}")
 
 # This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
 # All credits to Wh1t3Fox!
