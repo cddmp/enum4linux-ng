@@ -859,7 +859,7 @@ def check_share_access(share, target, creds):
     if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", output):
         return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
 
-    if "NT_STATUS_NAME_NOT_FOUND" in output:
+    if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in output:
         return Result(None, "Could not check share: NT_STATUS_OBJECT_NAME_NOT_FOUND")
 
     if "NT_STATUS_INVALID_PARAMETER" in output:
