@@ -1001,6 +1001,8 @@ def enum_printers(target, creds):
         return Result(None, f"Could not get printer info: NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
         return Result(None, f"Could not get printer info: NT_STATUS_HOST_UNREACHABLE")
+    if not printer_info:
+        return Result({}, f"No printer(s) found")
 
     match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", printer_info, re.MULTILINE)
     if not match_list:
