@@ -656,7 +656,7 @@ def enum_users_from_querydispinfo(target, creds):
             return Result(None, "Could not extract users from querydispinfo output")
     if users:
         return Result(users, f"Found {len(users.keys())} via 'querydispinfo'")
-    return Result(users, "Got an empty response, there are no users (this is not an error, there seem to be really none)")
+    return Result(users, "Got an empty response, there are no user(s) (this is not an error, there seem to be really none)")
 
 def enum_users_from_enumdomusers(target, creds):
     '''
@@ -681,7 +681,7 @@ def enum_users_from_enumdomusers(target, creds):
             return Result(None, "Could not extract users from eumdomusers output")
     if users:
         return Result(users, f"Found {len(users.keys())} via 'enumdomusers'")
-    return Result(users, "Got an empty response, there are no users (this is not an error, there seem to be really none)")
+    return Result(users, "Got an empty response, there are no user(s) (this is not an error, there seem to be really none)")
 
 def get_user_details_from_rid(rid, target, creds):
     '''
@@ -763,6 +763,9 @@ def enum_groups(grouptype, target, creds):
     if enum.retval is None:
         return enum
 
+    if not enum.retval:
+        return Result({}, f"Got an empty response, there no group(s) found via {grouptype_dict[grouptype]} command (this is not an error, there seem to be really none)")
+
     match = re.search("(group:.*)", enum.retval, re.DOTALL)
     if not match:
         return Result(None, f"Could not parse result of {grouptype_dict[grouptype]} command")
@@ -780,7 +783,7 @@ def enum_groups(grouptype, target, creds):
             return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output")
     if groups:
         return Result(groups, f"Found {len(groups.keys())} groups via '{grouptype_dict[grouptype]}'")
-    return Result(groups, "Got an empty response, there are no groups (this is not an error, there seem to be really none)")
+    return Result(groups, "Got an empty response, there are no group(s) (this is not an error, there seem to be really none)")
 
 def get_group_members_from_name(groupname, target, creds):
     '''
@@ -1002,7 +1005,7 @@ def enum_printers(target, creds):
     if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
         return Result(None, f"Could not get printer info: NT_STATUS_HOST_UNREACHABLE")
     if not printer_info:
-        return Result({}, f"No printer(s) found")
+        return Result({}, f"Got an empty response, there are no printer(s) (this is not an error, there seem to be really none)")
 
     match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", printer_info, re.MULTILINE)
     if not match_list:
