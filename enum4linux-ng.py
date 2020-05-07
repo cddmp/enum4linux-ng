@@ -322,7 +322,7 @@ def run_nmblookup(host):
     command = ["nmblookup", "-A", host]
     nmblookup_result = run(command, "Trying to get NetBIOS names information")
 
-    if f"No reply from {host}" in nmblookup_result:
+    if f"No reply from" in nmblookup_result:
         return Result(None, "Could not get NetBIOS names information via nmblookup: host does not reply")
     return Result(nmblookup_result, "")
 
@@ -1178,6 +1178,7 @@ def run(command, description=""):
     # Workaround for Samba bug (see https://bugzilla.samba.org/show_bug.cgi?id=13925)
     output = output.replace("Unable to initialize messaging context\n", "")
     output = output.replace("WARNING: no network interfaces found\n", "")
+    output = output.replace("Can't load /etc/samba/smb.conf - run testparm to debug it\n", "")
     output = output.rstrip('\n')
     return output
 
