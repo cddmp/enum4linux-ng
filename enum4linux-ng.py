@@ -322,7 +322,7 @@ def run_nmblookup(host):
     command = ["nmblookup", "-A", host]
     nmblookup_result = run(command, "Trying to get NetBIOS names information")
 
-    if f"No reply from" in nmblookup_result:
+    if "No reply from" in nmblookup_result:
         return Result(None, "Could not get NetBIOS names information via nmblookup: host does not reply")
     return Result(nmblookup_result, "")
 
