@@ -4,7 +4,7 @@ enum4linux-ng.py is a rewrite of Mark Lowe's (Portcullis Labs/Cisco) enum4linux.
 I mainly made this tool for educational purposes for myself. I tried to implement everything I was missing from the original tool.
 
 ## Features
-- support for YAML and JSON
+- support for YAML and JSON output
 - colored console output
 - ldapsearch und polenum are natively implemented
 
