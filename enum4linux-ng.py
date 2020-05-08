@@ -435,7 +435,10 @@ def get_namingcontexts(target):
         ldap_con = Connection(server, auto_bind=True)
         ldap_con.unbind()
     except Exception as e:
-        error = str(e.args[1][0][0])
+        if len(e.args) == 1:
+            error = str(e.args[0])
+        else:
+            error = str(e.args[1][0][0])
         if "]" in error:
             error = error.split(']', 1)[1]
         elif ":" in error:
