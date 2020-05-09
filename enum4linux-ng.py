@@ -1007,6 +1007,8 @@ def enum_printers(target, creds):
         return Result(None, f"Could not get printer info: NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
         return Result(None, f"Could not get printer info: NT_STATUS_HOST_UNREACHABLE")
+    if "No printers returned." in printer_info:
+        return Result({}, "No printers returned (this is not an error).")
     if not printer_info:
         return Result({}, f"Got an empty response, there are no printer(s) (this is not an error, there seem to be really none)")
 
