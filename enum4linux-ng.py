@@ -1712,7 +1712,7 @@ def check_args(argv):
     parser.add_argument("-U", action="store_true", help="Get userlist")
     parser.add_argument("-G", action="store_true", help="Get groups")
     parser.add_argument("-Gm", action="store_true", help="Get groups and member list")
-    parser.add_argument("-M", action="store_true", help="Get machine list*")
+    parser.add_argument("-M", action="store_true", help="Get machine list")
     parser.add_argument("-S", action="store_true", help="Get shares list")
     parser.add_argument("-P", action="store_true", help="Get password policy information")
     parser.add_argument("-O", action="store_true", help="Get OS information")
