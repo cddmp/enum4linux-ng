@@ -1,5 +1,5 @@
 # enum4linux-ng
-enum4linux-ng.py is a rewrite of Mark Lowe's (Portcullis Labs/Cisco) enum4linux.pl, a tool for enumerating information from Windows and Samba systems, aimed for penetration tester and other security professionals. The tool is mainly a wrapper around the Samba tools `nmblookup`, `net`, `rpcclient` and `smbclient`.
+enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs/Cisco now CiscoCXSecurityLabs) enum4linux.pl, a tool for enumerating information from Windows and Samba systems, aimed for penetration tester and other security professionals. The tool is mainly a wrapper around the Samba tools `nmblookup`, `net`, `rpcclient` and `smbclient`.
 
 I mainly made this tool for educational purposes for myself. I tried to implement everything I was missing from the original tool.
 
