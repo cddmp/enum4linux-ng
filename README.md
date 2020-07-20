@@ -1,7 +1,7 @@
 # enum4linux-ng
 enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs/Cisco now CiscoCXSecurityLabs) enum4linux.pl, a tool for enumerating information from Windows and Samba systems, aimed for penetration tester and other security professionals. The tool is mainly a wrapper around the Samba tools `nmblookup`, `net`, `rpcclient` and `smbclient`.
 
-I mainly made this tool for educational purposes for myself. I tried to implement everything I was missing from the original tool.
+The tool was made for educational purposes for myself and to overcome issues with enum4linux.pl. The tool has the same functionality as the original tool. Other than the original tool it parses the output of the Samba tools already and allows to export all findings as YAML or JSON file. The idea behind this is to make it easier to use the outcome of the tool with other tools. It is planned to add new features in the future.
 
 ## Features
 - support for YAML and JSON output
