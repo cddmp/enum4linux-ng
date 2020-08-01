@@ -1745,7 +1745,7 @@ def check_args(argv):
     parser.add_argument("-I", action="store_true", help="Get printer information")
     parser.add_argument("-R", action="store_true", help="Enumerate users via RID cycling")
     parser.add_argument("-N", action="store_true", help="Do an nmblookup (similar to nbstat) and try to retrieve workgroup from output")
-    parser.add_argument("-w", dest="workgroup", default='', type=str, help="Specify workgroup manually (usually found automatically)")
+    parser.add_argument("-w", dest="workgroup", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
     parser.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
     parser.add_argument("-d", action="store_true", help="Be detailed, applies to -U, -G and -R")
