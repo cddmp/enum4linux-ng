@@ -1150,7 +1150,7 @@ def policy_to_human(low, high, lockout=False):
         minutes = datetime.utcfromtimestamp(tmp).minute
         hours = datetime.utcfromtimestamp(tmp).hour
         days = datetime.utcfromtimestamp(tmp).day - 1
-    except ValueError:
+    except TypeError:
         return "invalid time"
 
     if days > 1:
