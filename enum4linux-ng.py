@@ -143,7 +143,7 @@ CONST_DOMAIN_FIELDS = {
 CONST_DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
 CONST_RID_RANGES = "500-550,1000-1050"
 CONST_KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
-CONST_TIMEOUT = 2
+CONST_TIMEOUT = 5
 
 # global_verbose is the only global variable which should be written to
 global_verbose = False
