@@ -1046,7 +1046,7 @@ def enum_printers(target, creds):
         name = match[1]
         description = match[2]
         comment = match[3]
-        printers[name] = OrderedDict({ "description":description, "comment":comment, "flags":flags})
+        printers[name] = OrderedDict({"description":description, "comment":comment, "flags":flags})
 
     return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yaml.dump(printers).rstrip()}")
 
@@ -1196,8 +1196,6 @@ def run(command, description=""):
     Run command and do some basic output filtering.
     '''
     if global_verbose and description:
-        # Works only in Python 3.8, which currently conflicts with some impacket stuff
-        #print(f"[V] {description}, running command: {shlex.join(command)}")
         print_verbose(f"{description}, running command: {' '.join(shlex.quote(x) for x in command)}")
 
     try:
@@ -1245,7 +1243,7 @@ def run_module_session_check(target, creds):
     Run session check module which tests for user and null sessions.
     '''
     module_name = "session_check"
-    print_heading(f"Session Check on {target.host}")
+    print_heading(f"Session check on {target.host}")
     output = {}
 
     # Check null session
@@ -1610,7 +1608,7 @@ def run_module_bruteforce_shares(brute_params, target, creds):
                     output["shares"][share] = result.retval
                     found_count += 1
     except:
-        output = process_error(f"Failed to open {shares_file}", module_name, output)
+        output = process_error(f"Failed to open {brute_params.shares_file}", module_name, output)
 
     if found_count == 0:
         output = process_error(f"Could not find any (new) shares", module_name, output)
@@ -1662,7 +1660,8 @@ def valid_timeout(timeout):
         if timeout >= 0:
             return True
     except:
-        return False
+        pass
+    return False
 
 def valid_rid_ranges(rid_ranges):
     if not rid_ranges:
