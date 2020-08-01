@@ -588,6 +588,8 @@ def run_srvinfo(target, creds):
         return Result(None, "Could not get OS info with srvinfo: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in srvinfo_result:
         return Result(None, "Could not get OS info with srvinfo: NT_STATUS_LOGON_FAILURE")
+    if "NT_STATUS_IO_TIMEOUT" in srvinfo_result:
+        return Result(None, "Could not get OS info with srvinfo: NT_STATUS_IO_TIMEOUT")
     return Result(srvinfo_result, "")
 
 # FIXME: Evaluate server_type_string
