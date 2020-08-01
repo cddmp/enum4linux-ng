@@ -21,7 +21,7 @@
 #   * something is missing => was not part of the enumeration OR an error happened, check
 #                             errors entry in JSON/YAML file
 ### PYLINT
-# pylint: disable=C0301
+# pylint: disable=C0301,E1101
 #
 ### FIXME
 # FIXME: Not sure if the run_something stuff is too crappy,
@@ -49,7 +49,7 @@ import shutil
 import shlex
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import OrderedDict
 from impacket import smbconnection
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
@@ -1174,7 +1174,7 @@ def policy_to_human(low, high, lockout=False):
         minutes = datetime.utcfromtimestamp(tmp).minute
         hours = datetime.utcfromtimestamp(tmp).hour
         days = datetime.utcfromtimestamp(tmp).day - 1
-    except TypeError:
+    except:
         return "invalid time"
 
     if days > 1:
