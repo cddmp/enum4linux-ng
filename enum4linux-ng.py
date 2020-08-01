@@ -1494,7 +1494,7 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
     print_heading(f"Users, Groups and Machines on {target.host} via RID cycling")
     output = cycle_params.enumerated_input
 
-    # Try to enumerated SIDs first, if we don't have the domain SID already
+    # Try to enumerate SIDs first, if we don't have the domain SID already
     if output["domain_sid"]:
         sids_list = [output["domain_sid"]]
     else:
