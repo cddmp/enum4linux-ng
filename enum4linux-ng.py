@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 ### ENUM4LINUX-NG
-# This tool is a rewrite of Mark Lowe's (Portcullis Labs/Cisco) enum4linux.pl, a tool for
-# enumerating information from Windows and Samba systems. As the original enum4linux.pl, this
-# tool is mainly a wrapper around the Samba tools 'nmblookup', 'net', 'rpcclient' and 'smbclient'.
-# Other than the original enum4linux.pl, enum4linux-ng parses all output of the previously mentioned
-# commands and (if the user requests so), fills the data in JSON/YAML output.
+# This tool is a rewrite of Mark Lowe's (former Portcullis Labs, now CiscoCXSecurity ) enum4linux.pl,
+# a tool for enumerating information from Windows and Samba systems.
+# As the original enum4linux.pl, this tool is mainly a wrapper around the Samba tools 'nmblookup', 'net',
+# 'rpcclient' and 'smbclient'. Other than the original enum4linux.pl, enum4linux-ng parses all output of
+# the previously mentioned commands and (if the user requests so), fills the data in JSON/YAML output.
 # The original enum4linux.pl had the additional dependencies 'ldapsearch' and 'polenum.py'. These are
 # natively implemented in enum4linux-ng. Console output is colored.
 #
