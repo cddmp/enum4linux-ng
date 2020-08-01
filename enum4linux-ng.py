@@ -51,6 +51,7 @@ import subprocess
 import sys
 from collections import OrderedDict
 from time import gmtime, strftime, time
+from impacket import smbconnection
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
@@ -1031,21 +1032,22 @@ def samr_init(target, creds):
     '''
     Tries to connect to the SAMR named pipe and get the domain handle.
     '''
-    rpctransport = transport.SMBTransport(target.host, target.port, r'\samr', creds.user, creds.pw)
-    rpctransport.set_connect_timeout(target.timeout)
     try:
+        smb = smbconnection.SMBConnection(remoteName=target.host, remoteHost=target.host, sess_port=target.port, timeout=target.timeout)
+        smb.login(creds.user, creds.pw, target.workgroup)
+        rpctransport = transport.SMBTransport(smb_connection=smb, filename=r'\samr', remoteName=target.host)
         dce = DCERPC_v5(rpctransport)
         dce.connect()
         dce.bind(samr.MSRPC_UUID_SAMR)
     except:
-        return Result((None, None), f"DCE/SAMR connect failed on port {target.port}/tcp")
+        return Result((None, None), f"DCE/SAMR named pipe connect failed on port {target.port}/tcp")
 
     try:
         resp = samr.hSamrConnect2(dce)
     except:
-        return Result((None, None), "SamrConnect failed")
+        return Result((None, None), f"SamrConnect2() call failed on port {target.port}/tcp")
     if resp['ErrorCode'] != 0:
-        return Result((None, None), "SamrConnect failed")
+        return Result((None, None), f"SamrConnect2() call failed on port {target.port}/tcp")
 
     resp2 = samr.hSamrEnumerateDomainsInSamServer(dce, serverHandle=resp['ServerHandle'], enumerationContext=0, preferedMaximumLength=500)
     if resp2['ErrorCode'] != 0:
