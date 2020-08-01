@@ -49,8 +49,8 @@ import shutil
 import shlex
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from collections import OrderedDict
-from time import gmtime, strftime, time
 from impacket import smbconnection
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
@@ -1147,10 +1147,10 @@ def policy_to_human(low, high, lockout=False):
         tmp = abs(high) * (1e-7)
 
     try:
-        minutes = int(strftime("%M", gmtime(tmp)))
-        hours = int(strftime("%H", gmtime(tmp)))
-        days = int(strftime("%j", gmtime(tmp)))-1
-    except ValueError as e:
+        minutes = datetime.utcfromtimestamp(tmp).minute
+        hours = datetime.utcfromtimestamp(tmp).hour
+        days = datetime.utcfromtimestamp(tmp).day - 1
+    except ValueError:
         return "invalid time"
 
     if days > 1:
@@ -1788,7 +1788,7 @@ def check_dependencies():
 
 def main():
     print("ENUM4LINUX-NG")
-    start_time = time()
+    start_time = datetime.now()
 
     # Make sure yaml can handle OrdereDicts
     yaml.add_representer(OrderedDict, lambda dumper, data: dumper.represent_mapping('tag:yaml.org,2002:map', data.items()))
@@ -1886,8 +1886,8 @@ def main():
         result = run_module_bruteforce_shares(share_brute_params, target, creds)
         output.update(result)
 
-    elapsed_time = time() - start_time
-    print(f"\nCompleted after {elapsed_time:.2f} seconds")
+    elapsed_time = datetime.now() - start_time
+    print(f"\nCompleted after {elapsed_time.total_seconds():.2f} seconds")
 
 if __name__ == "__main__":
     main()
