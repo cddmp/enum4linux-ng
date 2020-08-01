@@ -177,6 +177,25 @@ class Target:
         self.timeout = timeout
         self.tls = tls
 
+        self.workgroup_from_long_domain = False
+
+    def update_workgroup(self, workgroup, long_domain=False):
+        # Occassionally lsaquery would return a slightly different domain name than LDAP, e.g.
+        # MYDOMAIN vs. MY-DOMAIN. It is unclear what the impact of using one or the other is for
+        # subsequent enumeration steps.
+        # For now we prefer the domain name from LDAP ("long domain") over the domain/workgroup
+        # discovered by lsaquery or others.
+        if self.workgroup_from_long_domain:
+            return
+        if long_domain:
+            self.workgroup = workgroup.split('.')[0]
+            self.workgroup_from_long_domain = True
+        else:
+            self.workgroup = workgroup
+
+    def as_dict(self):
+        return {'target':{'host':self.host}}
+
 class Credentials:
     '''
     Stores username and password.
@@ -186,6 +205,9 @@ class Credentials:
         self.random_user = ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(8))
         self.user = user
         self.pw = pw
+
+    def as_dict(self):
+        return {'credentials':OrderedDict({'user':self.user, 'password':self.pw, 'random_user':self.random_user})}
 
 class Output:
     '''
@@ -1820,16 +1842,22 @@ def main():
     print_info(f"RID Range(s) ..... {args.ranges}")
     print_info(f"Known Usernames .. '{args.users}'")
 
+    # Add target host and creds information used during enumeration to output
+    output.update(target.as_dict())
+    output.update(creds.as_dict())
+
     # Checks if host is a parent/child domain controller, try to get long domain name
     if args.L or args.A or args.As:
         result = run_module_ldapsearch(target)
+        if "long_domain" in result:
+            target.update_workgroup(result["long_domain"], True)
         output.update(result)
 
     # Try to retrieve workstation and nbtstat information
     if args.N or args.A:
         result = run_module_netbios(target)
         if "workgroup" in result:
-            target.workgroup = result["workgroup"]
+            target.update_workgroup(result["workgroup"])
         output.update(result)
 
     # Check for user credential and null sessions
@@ -1841,7 +1869,7 @@ def main():
     # Try to get domain name and sid via lsaquery
     result = run_module_lsaquery(target, creds)
     if "workgroup" in result:
-        target.workgroup = result["workgroup"]
+        target.update_workgroup(result["workgroup"])
     output.update(result)
 
     # Get OS information like os version, server type string...
