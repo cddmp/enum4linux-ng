@@ -1381,7 +1381,7 @@ def run_module_srvinfo(target, creds):
         osinfo = get_os_info(srvinfo.retval)
         if osinfo.retval:
             print_success(osinfo.retmsg)
-            output["os info"] = osinfo.retval
+            output["os_info"] = osinfo.retval
         else:
             output = process_error(osinfo.retmsg, module_name, output)
     else:
