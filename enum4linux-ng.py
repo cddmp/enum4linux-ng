@@ -1756,6 +1756,9 @@ def check_args(argv):
     parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file")
     parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
+    if len(argv) == 0:
+        parser.print_help()
+        abort(1, "No arguments provided. Need at least argument host. Exiting.")
     args = parser.parse_args(sys.argv[1:])
 
     if args.host and (len(argv) == 1 or (len(argv) == 3 and (args.out_json_file or args.out_yaml_file))) or args.A:
