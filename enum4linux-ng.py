@@ -858,7 +858,7 @@ def get_group_details_from_rid(rid, target, creds):
                 details[line] = ""
 
         return Result(details, f"Found group details for group with RID {rid}")
-    return Result(details, f"Could not find group details for group with RID {rid}")
+    return Result(None, f"Could not find group details for group with RID {rid}")
 
 def check_share_access(share, target, creds):
     '''
@@ -987,7 +987,7 @@ def rid_cycle(sid, rid_ranges, target, creds):
     for rid_range in rid_ranges:
         (start_rid, end_rid) = rid_range
 
-        for rid in range(start_rid, end_rid):
+        for rid in range(start_rid, end_rid+1):
             command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"lookupsids {sid}-{rid}"]
             output = run(command, "RID Cycling")
 
@@ -1539,12 +1539,17 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
 
             if detailed:
                 if "users" in top_level_key:
-                    rid, entry = list(result.retval["users"].keys())[0]
+                    rid, entry = list(result.retval["users"].items())[0]
                     details = get_user_details_from_rid(rid, target, creds)
                 elif "groups" in top_level_key:
-                    rid, entry = list(result.retval["users"].keys())[0]
+                    rid, entry = list(result.retval["groups"].items())[0]
                     details = get_group_details_from_rid(rid, target, creds)
-                output[top_level_key][rid]["details"] = details
+
+                if details.retval:
+                    print_success(details.retmsg)
+                else:
+                    output = process_error(details.retmsg, module_name, output)
+                output[top_level_key][rid]["details"] = details.retval
 
     if found_count["users"] == 0 and found_count["groups"] == 0 and found_count["machines"] == 0:
         output = process_error(f"Could not find any (new) users, (new) groups or (new) machines", module_name, output)
