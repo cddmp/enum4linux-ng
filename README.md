@@ -31,24 +31,27 @@ In addition, you will need the following Python packages:
 
 Here are some examples on how to install all dependencies at once:
 
-ArchLinux
+### ArchLinux
 
 ```console
 pacman -S smbclient python-ldap3 python-yaml impacket
 ```
 
-Fedora derivates (tested on Fedora Workstation 31)
+### Fedora/CentOS/RHEL
+(tested on Fedora Workstation 31)
 
 ```console
 dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
 ```
 
-Kali Linux (tested on Kali Linux 2020.1, recent Debian versions like Buster should work)
+### Kali Linux/Debian/Ubuntu 
+(tested on Kali Linux 2020.1, recent Debian versions like Buster should work)
 
 ```console
 apt install smbclient python3-ldap3 python3-yaml python3-impacket
 ```
 
+### Linux distribution independent via python pip
 For the Python dependencies, you can of course also use pip. Note, that you might need `pip3` instead of `pip`, depending on your Linux distribution:
 
 ```console
@@ -59,4 +62,13 @@ or easily install with
 
 ```console
 pip install -r requirements.txt
+```
+### Linux distribution indepenent via python virtual environment
+```console
+git clone https://github.com/cddmp/enum4linux-ng
+cd enum4linux-ng
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
 ```
