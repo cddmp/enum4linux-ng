@@ -1759,7 +1759,11 @@ def check_args(argv):
     if len(argv) == 0:
         parser.print_help()
         abort(1, "No arguments provided. Need at least argument host. Exiting.")
-    args = parser.parse_args(sys.argv[1:])
+    args,unknown = parser.parse_known_args(sys.argv[1:])
+
+    if unknown:
+        parser.print_help()
+        abort(1, f"Unrecognized argument(s): {', '.join(unknown)}")
 
     if args.host and (len(argv) == 1 or (len(argv) == 3 and (args.out_json_file or args.out_yaml_file))) or args.A:
         args.A = True
