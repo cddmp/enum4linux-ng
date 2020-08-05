@@ -15,8 +15,17 @@ It was lots of fun reading your code. :)
 ## Legal note
 If you use the tool: Don't use it for illegal purposes.
 
+## Run
+1. Make sure you have all dependencies installed, various options are described [below](##Installing-dependencies).
+2. ```git clone https://github.com/cddmp/enum4linux-ng && cd enum4linux-ng```
+3. Run the tool, e.g. ```./enum4linux-ng.py -As 10.10.10.182 -oY enum.yaml```
+
+Supported Python: 3.6, 3.7, 3.8
+
+If you prefer a Docker based installation, an example run can be found [below](####Docker) as well.
+
 ## Installing dependencies
-In order to run the tool, you need the samba clients tools, namely:
+The tool uses the samba clients tools, namely:
 - nmblookup
 - net
 - rpcclient
@@ -29,41 +38,42 @@ In addition, you will need the following Python packages:
 - PyYaml
 - impacket
 
-Here are some examples on how to install all dependencies at once:
+Some examples for specific Linux distributions installations are listed below. Alternatively, distribution-agnostic ways (python pip, python virtual env and Docker) are possible.
 
-### ArchLinux
+### Linux distribution specific
+#### ArchLinux
 
 ```console
 pacman -S smbclient python-ldap3 python-yaml impacket
 ```
-
-### Fedora/CentOS/RHEL
+#### Fedora/CentOS/RHEL
 (tested on Fedora Workstation 31)
 
 ```console
 dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
 ```
 
-### Kali Linux/Debian/Ubuntu 
+#### Kali Linux/Debian/Ubuntu 
 (tested on Kali Linux 2020.1, recent Debian versions like Buster should work)
 
 ```console
 apt install smbclient python3-ldap3 python3-yaml python3-impacket
 ```
 
-### Linux distribution independent via python pip
-For the Python dependencies, you can of course also use pip. Note, that you might need `pip3` instead of `pip`, depending on your Linux distribution:
+### Linux distribution-agnostic
+#### Python pip
+Depending on the Linux distribution either `pip3` or `pip` is needed:
 
 ```console
 pip install pyyaml ldap3 impacket
 ```
 
-or easily install with
+Alternative:
 
 ```console
 pip install -r requirements.txt
 ```
-### Linux distribution indepenent via python virtual environment
+#### Python virtual environment
 ```console
 git clone https://github.com/cddmp/enum4linux-ng
 cd enum4linux-ng
@@ -71,7 +81,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-### Docker
+#### Docker
 ```console
 git clone https://github.com/cddmp/enum4linux-ng
 docker build enum4linux-ng --tag enum4linux-ng
