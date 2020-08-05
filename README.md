@@ -16,13 +16,13 @@ It was lots of fun reading your code. :)
 If you use the tool: Don't use it for illegal purposes.
 
 ## Run
-1. Make sure you have all dependencies installed, various options are described [below](##Installing-dependencies).
+1. Make sure you have all dependencies installed, various options are described under [Installing dependencies](#Installing-dependencies).
 2. ```git clone https://github.com/cddmp/enum4linux-ng && cd enum4linux-ng```
 3. Run the tool, e.g. ```./enum4linux-ng.py -As 10.10.10.182 -oY enum.yaml```
 
 Supported Python: 3.6, 3.7, 3.8
 
-If you prefer a Docker based installation, an example run can be found [below](####Docker) as well.
+If you prefer a Docker based installation, an example run can be found [below](#Docker) as well.
 
 ## Installing dependencies
 The tool uses the samba clients tools, namely:
