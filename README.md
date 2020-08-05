@@ -1,7 +1,7 @@
 # enum4linux-ng
-enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs now CiscoCXSecurityLabs) enum4linux.pl, a tool for enumerating information from Windows and Samba systems, aimed for penetration tester and other security professionals. The tool is mainly a wrapper around the Samba tools `nmblookup`, `net`, `rpcclient` and `smbclient`.
+enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs now CiscoCXSecurityLabs) enum4linux.pl, a tool for enumerating information from Windows and Samba systems, aimed for security professionals and CTF player. The tool is mainly a wrapper around the Samba tools `nmblookup`, `net`, `rpcclient` and `smbclient`.
 
-I made it for educational purposes for myself and to overcome issues with enum4linux.pl. It has the same functionality as the original tool. Other than the original tool it parses the output of the Samba tools already and allows to export all findings as YAML or JSON file. The idea behind this is to make it easier to further process the output with other tools. It is planned to add new features in the future.
+I made it for educational purposes for myself and to overcome issues with enum4linux.pl. It has the same functionality as the original tool. Other than the original tool it parses the output of the Samba tools and allows to export all findings as YAML or JSON file. The idea behind this is to make it easier to further process the output with other tools. It is planned to add new features in the future.
 
 ## Features
 - support for YAML and JSON output
@@ -22,7 +22,7 @@ If you use the tool: Don't use it for illegal purposes.
 
 Supported Python: 3.6, 3.7, 3.8
 
-If you prefer a Docker based installation, an example run can be found [below](#Docker) as well.
+If you prefer a Docker based installation, an example run can be found [below](#Docker).
 
 ## Installing dependencies
 The tool uses the samba clients tools, namely:
