@@ -17,10 +17,10 @@ If you use the tool: Don't use it for illegal purposes.
 
 ## Run
 1. Make sure you have all dependencies installed, various options are described under [Installing dependencies](#Installing-dependencies).
-2. ```git clone https://github.com/cddmp/enum4linux-ng && cd enum4linux-ng```
-3. Run the tool, e.g. ```./enum4linux-ng.py -As 10.10.10.182 -oY enum.yaml```
+2. ```$ git clone https://github.com/cddmp/enum4linux-ng && cd enum4linux-ng```
+3. Run the tool, e.g. ```$ ./enum4linux-ng.py -As 10.10.10.182 -oY enum.yaml```
 
-Supported Python: 3.6, 3.7, 3.8
+Supported Python versions: 3.6, 3.7, 3.8
 
 If you prefer a Docker based installation, an example run can be found [below](#Docker).
 
@@ -44,20 +44,20 @@ Some examples for specific Linux distributions installations are listed below. A
 #### ArchLinux
 
 ```console
-pacman -S smbclient python-ldap3 python-yaml impacket
+#  pacman -S smbclient python-ldap3 python-yaml impacket
 ```
 #### Fedora/CentOS/RHEL
 (tested on Fedora Workstation 31)
 
 ```console
-dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
+# dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
 ```
 
 #### Kali Linux/Debian/Ubuntu 
 (tested on Kali Linux 2020.1, recent Debian versions like Buster should work)
 
 ```console
-apt install smbclient python3-ldap3 python3-yaml python3-impacket
+# apt install smbclient python3-ldap3 python3-yaml python3-impacket
 ```
 
 ### Linux distribution-agnostic
@@ -65,28 +65,33 @@ apt install smbclient python3-ldap3 python3-yaml python3-impacket
 Depending on the Linux distribution either `pip3` or `pip` is needed:
 
 ```console
-pip install pyyaml ldap3 impacket
+$ pip install pyyaml ldap3 impacket
 ```
 
 Alternative:
 
 ```console
-pip install -r requirements.txt
+$ pip install -r requirements.txt
 ```
+
+Remember you need to still install the samba tools as mentioned above.
+
 #### Python virtual environment
 ```console
-git clone https://github.com/cddmp/enum4linux-ng
-cd enum4linux-ng
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+$ git clone https://github.com/cddmp/enum4linux-ng
+$ cd enum4linux-ng
+$ python3 -m venv venv
+$ source venv/bin/activate
+$ pip install -r requirements.txt
 ```
+
+Remember you need to still install the samba tools as mentioned above.
 #### Docker
 ```console
-git clone https://github.com/cddmp/enum4linux-ng
-docker build enum4linux-ng --tag enum4linux-ng
+$ git clone https://github.com/cddmp/enum4linux-ng
+$ docker build enum4linux-ng --tag enum4linux-ng
 ```
 Once finished an example run could look like this:
 ```console
-docker run -t enum4linux-ng -As 1.2.3.4 
+$ docker run -t enum4linux-ng -As 1.2.3.4 
 ```
