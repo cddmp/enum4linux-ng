@@ -194,7 +194,7 @@ class Target:
             self.workgroup = workgroup
 
     def as_dict(self):
-        return {'target':{'host':self.host}}
+        return {'target':{'host':self.host, 'workgroup':self.workgroup}}
 
 class Credentials:
     '''
