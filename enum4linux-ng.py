@@ -273,7 +273,7 @@ class Output:
                     f.write(yaml.dump(self.out_dict))
                 f.close()
             except:
-                abort(1, f"An error happened trying go write to {self.out_file}. Exiting.")
+                abort(1, f"An error happened trying to write {self.out_file}. Exiting.")
 
     def as_dict(self):
         return self.out_dict
