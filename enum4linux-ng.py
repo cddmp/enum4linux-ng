@@ -917,7 +917,7 @@ def enum_shares(target, creds):
 
     if shares:
         return Result(shares, f"Found {len(shares.keys())} share(s): {','.join(shares.keys())}")
-    return Result(shares, f"No shares returned for user '{creds.user}' with password '{creds.pw}' (this is not an error, there seem to be really none), try a different user")
+    return Result(shares, f"No share(s) returned for user '{creds.user}' with password '{creds.pw}' (this is not an error, there seem to be really none), try a different user")
 
 def enum_sids(users, target, creds):
     '''
