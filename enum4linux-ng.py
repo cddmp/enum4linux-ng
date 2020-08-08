@@ -613,11 +613,11 @@ def run_srvinfo(target, creds):
     srvinfo_result = run(command, "Attempting to get OS info with command")
 
     if "NT_STATUS_ACCESS_DENIED" in srvinfo_result:
-        return Result(None, "Could not get OS info with srvinfo: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not get OS info via srvinfo: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in srvinfo_result:
-        return Result(None, "Could not get OS info with srvinfo: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not get OS info via srvinfo: NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_IO_TIMEOUT" in srvinfo_result:
-        return Result(None, "Could not get OS info with srvinfo: NT_STATUS_IO_TIMEOUT")
+        return Result(None, "Could not get OS info via srvinfo: NT_STATUS_IO_TIMEOUT")
     return Result(srvinfo_result, "")
 
 # FIXME: Evaluate server_type_string
@@ -661,11 +661,11 @@ def run_querydispinfo(target, creds):
     querydispinfo_result = run(command, "Attempting to get userlist")
 
     if "NT_STATUS_ACCESS_DENIED" in querydispinfo_result:
-        return Result(None, "Could not find users using querydispinfo: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not find users via querydispinfo: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in querydispinfo_result:
-        return Result(None, "Could not find users using querydispinfo: NT_STATUS_INVALID_PARAMETER")
+        return Result(None, "Could not find users via querydispinfo: NT_STATUS_INVALID_PARAMETER")
     if "NT_STATUS_LOGON_FAILURE" in querydispinfo_result:
-        return Result(None, "Could not find users using querydispinfo: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not find users via querydispinfo: NT_STATUS_LOGON_FAILURE")
     return Result(querydispinfo_result, "")
 
 def run_enumdomusers(target, creds):
@@ -679,11 +679,11 @@ def run_enumdomusers(target, creds):
     enumdomusers_result = run(command, "Attempting to get userlist")
 
     if "NT_STATUS_ACCESS_DENIED" in enumdomusers_result:
-        return Result(None, "Could not find users using enumdomusers: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not find users via enumdomusers: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in enumdomusers_result:
-        return Result(None, "Could not find users using enumdomusers: NT_STATUS_INVALID_PARAMETER")
+        return Result(None, "Could not find users via enumdomusers: NT_STATUS_INVALID_PARAMETER")
     if "NT_STATUS_LOGON_FAILURE" in enumdomusers_result:
-        return Result(None, "Could not find users using enumdomusers: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not find users via enumdomusers: NT_STATUS_LOGON_FAILURE")
     return Result(enumdomusers_result, "")
 
 def enum_users_from_querydispinfo(target, creds):
@@ -1065,11 +1065,11 @@ def enum_printers(target, creds):
     if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
         return Result("", f"No printer available")
     if "NT_STATUS_ACCESS_DENIED" in printer_info:
-        return Result(None, f"Could not get printer info: NT_STATUS_ACCESS_DENIED")
+        return Result(None, f"Could not get printer info via enumprinters: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in printer_info:
-        return Result(None, f"Could not get printer info: NT_STATUS_LOGON_FAILURE")
+        return Result(None, f"Could not get printer info via enumprinters: NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
-        return Result(None, f"Could not get printer info: NT_STATUS_HOST_UNREACHABLE")
+        return Result(None, f"Could not get printer info via enumprinters: NT_STATUS_HOST_UNREACHABLE")
     if "No printers returned." in printer_info:
         return Result({}, "No printers returned (this is not an error).")
     if not printer_info:
