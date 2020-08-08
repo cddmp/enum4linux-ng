@@ -1298,9 +1298,9 @@ def run_module_ldapsearch(target):
 
     for with_tls in [False, True]:
         if with_tls:
-            print_info(f'Trying LDAPS')
+            print_info(f'Trying LDAPS (timeout: {target.timeout}s)')
         else:
-            print_info(f'Trying LDAP')
+            print_info(f'Trying LDAP (timeout: {target.timeout}s)')
         target.tls = with_tls
         namingcontexts = get_namingcontexts(target)
         if namingcontexts.retval is not None:
@@ -1631,7 +1631,7 @@ def run_module_enum_policy(target, creds):
     output = {}
 
     for port in [139, 445]:
-        print_info(f"Trying port {port}/tcp")
+        print_info(f"Trying port {port}/tcp (timeout: {target.timeout}s)")
         target.port = port
         enum = enum_policy(target, creds)
         if enum.retval is None:
