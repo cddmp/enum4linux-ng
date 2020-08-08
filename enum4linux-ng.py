@@ -14,12 +14,36 @@
 # In addition, I'd like to thank and give credit to Wh1t3Fox for creating 'polenum'.
 #
 ### DESIGN
+#
+# Error handling
+# ==============
+#
 # * Functions:
-#       * return value is None/False     => error happened
-#       * return value is empty [],{},"" => no error, nothing was returned
+#       * return value is None
+#         => an error happened, error messages will be printed out and will end up in the JSON/YAML with value
+#            null (see also YAML/JSON below)
+#
+#       * return value is False for 'session_possible'
+#         => error, it was not possible to setup a session with the target, therefore any subsequent module runs were
+#            omitted
+#         => all other booleans are not errors
+#
+#       * return value is empty [],{},""
+#         => no error, nothing was returned (e.g. a group has no members)
+#
 # * YAML/JSON:
-#   * something is missing => was not part of the enumeration OR an error happened, check
-#                             errors entry in JSON/YAML file
+#       * null
+#         => an error happened (see above, a function returned None which translates to null in JSON/YAML) - in
+#            this case an error message was generated and can be found under:
+#            'errors' -> key for which the error happened (e.g. os_info) -> module name where the error occured
+#            (e.g. module_srvinfo)
+#
+#       * missing key
+#         => either it was not part of the enumeration because the user did not request it (aka did not provide
+#            the right parameter when running enum4linux-ng)
+#         => or it was part of the enumeration but no session could be set up (see above), in this case the
+#            'session_possible' should be 'False'
+#
 ### PYLINT
 # pylint: disable=C0301,E1101
 #
@@ -271,7 +295,7 @@ class RidCycleParams:
             if key in enum_input:
                 self.enumerated_input[key] = enum_input[key]
             else:
-                self.enumerated_input[key] = {}
+                self.enumerated_input[key] = None
 
         if "domain_sid" in enum_input:
             self.enumerated_input["domain_sid"] = enum_input["domain_sid"]
@@ -292,7 +316,7 @@ class ShareBruteParams:
         if "shares" in enum_input:
             self.enumerated_input["shares"] = enum_input["shares"]
         else:
-            self.enumerated_input["shares"] = {}
+            self.enumerated_input["shares"] = None
 
 def print_heading(text):
     output = f"|    {text}    |"
@@ -314,7 +338,7 @@ def print_info(msg):
 def print_verbose(msg):
     print(f"[V] {msg}")
 
-def process_error(msg, module_name, output_dict):
+def process_error(msg, entries, module_name, output_dict):
     '''
     Helper function to print error and update output dictionary at the same time.
     '''
@@ -323,10 +347,14 @@ def process_error(msg, module_name, output_dict):
     if not "errors" in output_dict:
         output_dict["errors"] = {}
 
-    if not module_name in output_dict["errors"]:
-        output_dict["errors"] = {module_name: []}
+    for entry in entries:
+        if not entry in output_dict["errors"]:
+            output_dict["errors"] = {entry: {}}
 
-    output_dict["errors"][module_name] += [msg]
+        if not module_name in output_dict["errors"][entry]:
+            output_dict["errors"][entry] = {module_name: []}
+
+        output_dict["errors"][entry][module_name] += [msg]
     return output_dict
 
 def abort(code, msg):
@@ -681,10 +709,10 @@ def enum_users_from_querydispinfo(target, creds):
             description = match.group(5)
             users[rid] = OrderedDict({"username":username, "name":name, "acb":acb, "description":description})
         else:
-            return Result(None, "Could not extract users from querydispinfo output")
+            return Result(None, "Could not extract users from querydispinfo output, please open a GitHub issue")
     if users:
         return Result(users, f"Found {len(users.keys())} via 'querydispinfo'")
-    return Result(users, "Got an empty response, there are no user(s) (this is not an error, there seem to be really none)")
+    return Result(users, "Empty response, there are no user(s) (this is not an error, there seem to be really none)")
 
 def enum_users_from_enumdomusers(target, creds):
     '''
@@ -706,10 +734,10 @@ def enum_users_from_enumdomusers(target, creds):
             rid = str(int(rid, 16))
             users[rid] = {"username":username}
         else:
-            return Result(None, "Could not extract users from eumdomusers output")
+            return Result(None, "Could not extract users from eumdomusers output, please open a GitHub issue")
     if users:
         return Result(users, f"Found {len(users.keys())} via 'enumdomusers'")
-    return Result(users, "Got an empty response, there are no user(s) (this is not an error, there seem to be really none)")
+    return Result(users, "Empty response, there are no user(s) (this is not an error, there seem to be really none)")
 
 def get_user_details_from_rid(rid, target, creds):
     '''
@@ -747,7 +775,7 @@ def get_user_details_from_rid(rid, target, creds):
                     details[CONST_ACB_DICT[key]] = False
 
         return Result(details, f"Found user details for user with RID {rid}")
-    return Result(details, f"Could not find user details for user with RID {rid}")
+    return Result(None, f"Could not find user details for user with RID {rid}")
 
 def run_enum_groups(grouptype, target, creds):
     '''
@@ -788,15 +816,16 @@ def enum_groups(grouptype, target, creds):
 
     groups = {}
     enum = run_enum_groups(grouptype, target, creds)
+
     if enum.retval is None:
         return enum
 
     if not enum.retval:
-        return Result({}, f"Got an empty response, there no group(s) found via {grouptype_dict[grouptype]} command (this is not an error, there seem to be really none)")
+        return Result({}, f"Empty response, there were no group(s) found via {grouptype_dict[grouptype]} command (this is not an error, there seem to be really none)")
 
     match = re.search("(group:.*)", enum.retval, re.DOTALL)
     if not match:
-        return Result(None, f"Could not parse result of {grouptype_dict[grouptype]} command")
+        return Result(None, f"Could not parse result of {grouptype_dict[grouptype]} command, please open a GitHub issue")
 
     # Example output of rpcclient's group commands:
     # group:[RAS and IAS Servers] rid:[0x229]
@@ -808,10 +837,11 @@ def enum_groups(grouptype, target, creds):
             rid = str(int(rid, 16))
             groups[rid] = OrderedDict({"groupname":groupname, "type":grouptype})
         else:
-            return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output")
+            return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output, please open a GitHub issue")
     if groups:
         return Result(groups, f"Found {len(groups.keys())} groups via '{grouptype_dict[grouptype]}'")
-    return Result(groups, "Got an empty response, there are no group(s) (this is not an error, there seem to be really none)")
+    # FIXME: This can propably go. Are there any cases when this is reached?
+    return Result(groups, "Empty response, there are no group(s) (this is not an error, there seem to be really none)")
 
 def get_group_members_from_name(groupname, target, creds):
     '''
@@ -820,6 +850,10 @@ def get_group_members_from_name(groupname, target, creds):
     '''
     command = ["net", "rpc", "group", "members", groupname, "-W", target.workgroup, "-I", target.host, "-U", f"{creds.user}%{creds.pw}"]
     members_string = run(command, f"Attempting to get group memberships for group {groupname}")
+
+    if not members_string:
+        return Result('', f"Empty response, there are no members for group '{groupname}' (this is not an error, there seem to be really none)")
+
     members = []
     for member in members_string.splitlines():
         if "Couldn't lookup SIDs" in member:
@@ -828,7 +862,8 @@ def get_group_members_from_name(groupname, target, creds):
 
     if members:
         return Result(','.join(members), f"Found {len(members)} member(s) for group '{groupname}'")
-    return Result('', f"Could not find members for group '{groupname}'")
+    #FIXME: This can propably go. Are there any cases when this is reached?
+    return Result(None, f"Could not find members for group '{groupname}'")
 
 def get_group_details_from_rid(rid, target, creds):
     '''
@@ -842,6 +877,9 @@ def get_group_details_from_rid(rid, target, creds):
     output = run(command, "Attempting to get detailed group info")
 
     #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
+    if "NT_STATUS_NO_SUCH_GROUP" in output:
+        return Result(None, f"Could not get details for group with RID {rid}: NT_STATUS_NO_SUCH_GROUP")
+
     match = re.search("([^\n]*Group Name.*Num Members[^\n]*)", output, re.DOTALL)
     if match:
         group_info = match.group(1)
@@ -1035,11 +1073,11 @@ def enum_printers(target, creds):
     if "No printers returned." in printer_info:
         return Result({}, "No printers returned (this is not an error).")
     if not printer_info:
-        return Result({}, f"Got an empty response, there are no printer(s) (this is not an error, there seem to be really none)")
+        return Result({}, f"Empty response, there are no printer(s) (this is not an error, there seem to be really none)")
 
     match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", printer_info, re.MULTILINE)
     if not match_list:
-        return Result(None, f"Could not parse result of enumprinters command")
+        return Result(None, f"Could not parse result of enumprinters command, please open a GitHub issue")
 
     for match in match_list:
         flags = match[0]
@@ -1215,26 +1253,24 @@ def run_module_netbios(target):
     '''
     Run NetBIOS module which collects Netbios names and the workgroup.
     '''
-    module_name = "netbios"
+    module_name = "module_netbios"
     print_heading(f"Getting NetBIOS names for {target.host}")
-    output = {}
+    output = {"workgroup":None, "nmblookup":None}
 
     nmblookup = run_nmblookup(target.host)
     if nmblookup.retval:
         result = get_workgroup_from_nmblookup(nmblookup.retval)
         if result.retval:
             print_success(result.retmsg)
-            # If the given workgroup was empty, we set it
-            if not target.workgroup:
-                output["workgroup"] = result.retval
+            output["workgroup"] = result.retval
         else:
-            output = process_error(result.retmsg, module_name, output)
+            output = process_error(result.retmsg, ["workgroup"], module_name, output)
 
         result = nmblookup_to_human(nmblookup.retval)
         print_success(result.retmsg)
         output["nmblookup"] = result.retval
     else:
-        output = process_error(nmblookup.retmsg, module_name, output)
+        output = process_error(nmblookup.retmsg, ["nmblookup"], module_name, output)
 
     return output
 
@@ -1242,47 +1278,49 @@ def run_module_session_check(target, creds):
     '''
     Run session check module which tests for user and null sessions.
     '''
-    module_name = "session_check"
+    module_name = "module_session_check"
     print_heading(f"Session check on {target.host}")
-    output = {}
+    output = {"null_session_possible":False,
+            "user_session_possible":False,
+            "random_user_session_possible":False,
+            "sessions_possible":False}
 
     # Check null session
     print_info("Check for null session")
-    output["null_session_possible"] = False
     null_session = check_session(target, Credentials('', ''))
     if null_session.retval:
         output["null_session_possible"] = True
         print_success(null_session.retmsg)
     else:
-        output = process_error(null_session.retmsg, module_name, output)
+        output = process_error(null_session.retmsg, ["null_session_possible"], module_name, output)
 
     # Check user session
     if creds.user:
         print_info("Check for user session")
-        output["user_session_possible"] = False
         user_session = check_session(target, creds)
         if user_session.retval:
             output["user_session_possible"] = True
             print_success(user_session.retmsg)
         else:
-            output = process_error(user_session.retmsg, module_name, output)
+            output = process_error(user_session.retmsg, ["user_session_possible"], module_name, output)
 
     # Check random user session
     print_info(f"Check for random user session")
-    output["random_user_session_possible"] = False
     user_session = check_session(target, creds, random_user_session=True)
     if user_session.retval:
         output["random_user_session_possible"] = True
         print_success(user_session.retmsg)
         print_success(f"Re-running enumeration with user '{creds.random_user}' might give more results.")
     else:
-        output = process_error(user_session.retmsg, module_name, output)
+        output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
 
-    output["sessions_possible"] = False
     if ("null_session_possible" in output and output["null_session_possible"]) or \
         ("user_session_possible" in output and output["user_session_possible"]) or \
         ("random_user_session_possible" in output and output["random_user_session_possible"]):
         output["sessions_possible"] = True
+    else:
+        output["sessions_possible"] = False
+        process_error("Sessions failed, neither null nor user sessions were possible.", ["sessions_possible", "null_session_possible", "user_session_possible", "random_user_session_possible"], module_name, output)
 
     return output
 
@@ -1292,9 +1330,11 @@ def run_module_ldapsearch(target):
     child DC. Also tries to fetch long domain name. The information are get from
     the LDAP RootDSE.
     '''
-    module_name = "ldapsearch"
+    module_name = "module_ldapsearch"
     print_heading(f"Getting information via LDAP for {target.host}")
-    output = {}
+    output = {"is_parent_dc":None,
+            "is_child_dc":None,
+            "long_domain":None}
 
     for with_tls in [False, True]:
         if with_tls:
@@ -1305,7 +1345,7 @@ def run_module_ldapsearch(target):
         namingcontexts = get_namingcontexts(target)
         if namingcontexts.retval is not None:
             break
-        output = process_error(namingcontexts.retmsg, module_name, output)
+        output = process_error(namingcontexts.retmsg, ["is_parent_dc", "is_child_dc", "long_domain"], module_name, output)
 
     if namingcontexts.retval:
         # Parent/root or child DC?
@@ -1324,7 +1364,7 @@ def run_module_ldapsearch(target):
             print_success(result.retmsg)
             output["long_domain"] = result.retval
         else:
-            output = process_error(result.retmsg, module_name, output)
+            output = process_error(result.retmsg, ["long_domain"], module_name, output)
 
     return output
 
@@ -1333,9 +1373,11 @@ def run_module_lsaquery(target, creds):
     Run module lsaquery which tries to get domain information like
     the domain/workgroup name, domain SID and the membership type.
     '''
-    module_name = "lsaquery"
+    module_name = "module_lsaquery"
     print_heading(f"Getting domain information for {target.host}")
-    output = {}
+    output = {"workgroup":None,
+            "domain_sid":None,
+            "member_of":None}
 
     lsaquery = run_lsaquery(target, creds)
     if lsaquery.retval is not None:
@@ -1343,10 +1385,9 @@ def run_module_lsaquery(target, creds):
         result = get_workgroup_from_lsaquery(lsaquery.retval)
         if result.retval:
             print_success(result.retmsg)
-            if not target.workgroup:
-                output["workgroup"] = result.retval
+            output["workgroup"] = result.retval
         else:
-            output = process_error(result.retmsg, module_name, output)
+            output = process_error(result.retmsg, ["workgroup"], module_name, output)
 
         # Try to get domain SID
         result = get_domain_sid_from_lsaquery(lsaquery.retval)
@@ -1354,7 +1395,7 @@ def run_module_lsaquery(target, creds):
             print_success(result.retmsg)
             output["domain_sid"] = result.retval
         else:
-            output = process_error(result.retmsg, module_name, output)
+            output = process_error(result.retmsg, ["domain_sid"], module_name, output)
 
         # Is the host part of a domain or a workgroup?
         result = check_is_part_of_workgroup_or_domain(lsaquery.retval)
@@ -1362,9 +1403,9 @@ def run_module_lsaquery(target, creds):
             print_success(result.retmsg)
             output["member_of"] = result.retval
         else:
-            output = process_error(result.retmsg, module_name, output)
+            output = process_error(result.retmsg, ["member_of"], module_name, output)
     else:
-        output = process_error(lsaquery.retmsg, module_name, output)
+        output = process_error(lsaquery.retmsg, ["workgroup", "domain_sid", "member_of"], module_name, output)
 
     return output
 
@@ -1372,9 +1413,9 @@ def run_module_srvinfo(target, creds):
     '''
     Run module srvinfo which collects various OS information.
     '''
-    module_name = "srvinfo"
+    module_name = "module_srvinfo"
     print_heading(f"OS information on {target.host}")
-    output = {}
+    output = {"os_info":None}
 
     srvinfo = run_srvinfo(target, creds)
     if srvinfo.retval:
@@ -1383,9 +1424,9 @@ def run_module_srvinfo(target, creds):
             print_success(osinfo.retmsg)
             output["os_info"] = osinfo.retval
         else:
-            output = process_error(osinfo.retmsg, module_name, output)
+            output = process_error(osinfo.retmsg, ["os_info"], module_name, output)
     else:
-        output = process_error(srvinfo.retmsg, module_name, output)
+        output = process_error(srvinfo.retmsg, ["os_info"], module_name, output)
 
     return output
 
@@ -1393,7 +1434,7 @@ def run_module_enum_users(target, creds, detailed):
     '''
     Run module enum users.
     '''
-    module_name = "enum_users"
+    module_name = "module_enum_users"
     print_heading(f"Users on {target.host}")
     output = {}
 
@@ -1401,8 +1442,8 @@ def run_module_enum_users(target, creds, detailed):
     # Get user via querydispinfo
     users_qdi = enum_users_from_querydispinfo(target, creds)
     if users_qdi.retval is None:
-        output = process_error(users_qdi.retmsg, module_name, output)
-        users_qdi_output = {}
+        output = process_error(users_qdi.retmsg, ["users"], module_name, output)
+        users_qdi_output = None
     else:
         print_success(users_qdi.retmsg)
         users_qdi_output = users_qdi.retval
@@ -1410,14 +1451,19 @@ def run_module_enum_users(target, creds, detailed):
     # Get user via enumdomusers
     users_edu = enum_users_from_enumdomusers(target, creds)
     if users_edu.retval is None:
-        output = process_error(users_edu.retmsg, module_name, output)
-        users_edu_output = {}
+        output = process_error(users_edu.retmsg, ["users"], module_name, output)
+        users_edu_output = None
     else:
         print_success(users_edu.retmsg)
         users_edu_output = users_edu.retval
 
     # Merge both users dicts
-    users = {**users_edu_output, **users_qdi_output}
+    if users_qdi_output is not None and users_edu_output is not None:
+        users = {**users_edu_output, **users_qdi_output}
+    elif users_edu_output is None:
+        users = users_qdi_output
+    else:
+        users = users_edu_output
 
     if users:
         if detailed:
@@ -1428,7 +1474,7 @@ def run_module_enum_users(target, creds, detailed):
                     print_success(user_details.retmsg)
                     users[rid]["details"] = user_details.retval
                 else:
-                    output = process_error(user_details.retmsg, module_name, output)
+                    output = process_error(user_details.retmsg, ["users"], module_name, output)
                     users[rid]["details"] = ""
 
         print_success(f"After merging user results we have {len(users.keys())} users total:\n{yaml.dump(users).rstrip()}")
@@ -1440,17 +1486,19 @@ def run_module_enum_groups(target, creds, with_members, detailed):
     '''
     Run module enum groups.
     '''
-    module_name = "enum_groups"
+    module_name = "module_enum_groups"
     print_heading(f"Groups on {target.host}")
     output = {}
-    groups = {}
+    groups = None
 
     print_info("Enumerating groups")
     for grouptype in ["local", "builtin", "domain"]:
         enum = enum_groups(grouptype, target, creds)
         if enum.retval is None:
-            output = process_error(enum.retmsg, module_name, output)
+            output = process_error(enum.retmsg, ["groups"], module_name, output)
         else:
+            if groups is None:
+                groups = {}
             print_success(enum.retmsg)
             groups.update(enum.retval)
 
@@ -1463,25 +1511,24 @@ def run_module_enum_groups(target, creds, with_members, detailed):
                 # Get group members
                 groupname = groups[rid]['groupname']
                 group_members = get_group_members_from_name(groupname, target, creds)
-                if group_members.retval:
+                if group_members.retval or group_members.retval == '':
                     print_success(group_members.retmsg)
                     groups[rid]["members"] = group_members.retval
                 else:
                     groups[rid]["members"] = ""
-                    output = process_error(group_members.retmsg, module_name, output)
+                    output = process_error(group_members.retmsg, ["groups"], module_name, output)
 
-                #FIXME: Return value None for everything which was not "filled" out in the current run?
-                #groups[rid]["details"] = None
         if detailed:
             print_info("Enumerating group details")
             for rid in groups.keys():
-                group_details = get_group_details_from_rid(rid, target, creds)
-                if group_details.retval:
-                    print_success(group_details.retmsg)
-                    groups[rid]["details"] = group_details.retval
+                details = get_group_details_from_rid(rid, target, creds)
+
+                if details.retval:
+                    print_success(details.retmsg)
                 else:
-                    output = process_error(group_details.retmsg, module_name, output)
-                    groups[rid]["details"] = ""
+                    output = process_error(details.retmsg, ["groups"], module_name, output)
+                groups[rid]["details"] = details.retval
+
         print_success(f"After merging groups results we have {len(groups.keys())} groups total:\n{yaml.dump(groups).rstrip()}")
     output["groups"] = groups
     return output
@@ -1490,7 +1537,7 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
     '''
     Run module RID cycling.
     '''
-    module_name = "rid_cycling"
+    module_name = "module_rid_cycling"
     print_heading(f"Users, Groups and Machines on {target.host} via RID cycling")
     output = cycle_params.enumerated_input
 
@@ -1501,7 +1548,7 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
         print_info(f"Trying to enumerate SIDs")
         sids = enum_sids(cycle_params.known_usernames, target, creds)
         if sids.retval is None:
-            output = process_error(sids.retmsg, module_name, output)
+            output = process_error(sids.retmsg, ["users", "groups", "machines"], module_name, output)
             return output
         print_success(sids.retmsg)
         sids_list = sids.retval
@@ -1528,16 +1575,18 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
             entry = result.retval[top_level_key][rid]
 
             # If we have the RID already, we continue...
-            if rid in output[top_level_key]:
+            if output[top_level_key] is not None and rid in output[top_level_key]:
                 continue
 
             print_success(result.retmsg)
             found_count[top_level_key] += 1
 
             # ...else we add the result at the right position.
+            if output[top_level_key] is None:
+                output[top_level_key] = {}
             output[top_level_key][rid] = entry
 
-            if detailed:
+            if detailed and ("users" in top_level_key or "groups" in top_level_key):
                 if "users" in top_level_key:
                     rid, entry = list(result.retval["users"].items())[0]
                     details = get_user_details_from_rid(rid, target, creds)
@@ -1548,11 +1597,11 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
                 if details.retval:
                     print_success(details.retmsg)
                 else:
-                    output = process_error(details.retmsg, module_name, output)
+                    output = process_error(details.retmsg, [top_level_key], module_name, output)
                 output[top_level_key][rid]["details"] = details.retval
 
     if found_count["users"] == 0 and found_count["groups"] == 0 and found_count["machines"] == 0:
-        output = process_error(f"Could not find any (new) users, (new) groups or (new) machines", module_name, output)
+        output = process_error(f"Could not find any (new) users, (new) groups or (new) machines", ["users", "groups", "machines"], module_name, output)
     else:
         print_success(f"Found {found_count['users']} user(s), {found_count['groups']} group(s), {found_count['machines']} machine(s) in total")
 
@@ -1562,14 +1611,14 @@ def run_module_enum_shares(target, creds):
     '''
     Run module enum shares.
     '''
-    module_name = "enum_shares"
+    module_name = "module_enum_shares"
     print_heading(f"Share enumeration on {target.host}")
     output = {}
-    shares = {}
+    shares = None
 
     enum = enum_shares(target, creds)
     if enum.retval is None:
-        output = process_error(enum.retmsg, module_name, output)
+        output = process_error(enum.retmsg, ["shares"], module_name, output)
     else:
         # This will print success even if no shares were found (which is not an error.)
         print_success(enum.retmsg)
@@ -1580,7 +1629,7 @@ def run_module_enum_shares(target, creds):
                 print_info(f"Testing share {share}")
                 access = check_share_access(share, target, creds)
                 if access.retval is None:
-                    output = process_error(access.retmsg, module_name, output)
+                    output = process_error(access.retmsg, ["shares"], module_name, output)
                     continue
                 print_success(access.retmsg)
                 shares[share] = access.retval
@@ -1592,7 +1641,7 @@ def run_module_bruteforce_shares(brute_params, target, creds):
     '''
     Run module bruteforce shares.
     '''
-    module_name = "bruteforce_shares"
+    module_name = "module_bruteforce_shares"
     print_heading(f"Share bruteforcing on {target.host}")
     output = brute_params.enumerated_input
 
@@ -1603,20 +1652,22 @@ def run_module_bruteforce_shares(brute_params, target, creds):
                 share = share.rstrip()
 
                 # Skip all shares we might have found by the enum_shares module already
-                if share in output["shares"].keys():
+                if output["shares"] is not None and share in output["shares"].keys():
                     continue
 
                 result = check_share_access(share, target, creds)
                 if result.retval:
+                    if output["shares"] is None:
+                        output["shares"] = {}
                     print_success(f"Found share: {share}")
                     print_success(result.retmsg)
                     output["shares"][share] = result.retval
                     found_count += 1
     except:
-        output = process_error(f"Failed to open {brute_params.shares_file}", module_name, output)
+        output = process_error(f"Failed to open {brute_params.shares_file}", ["shares"], module_name, output)
 
     if found_count == 0:
-        output = process_error(f"Could not find any (new) shares", module_name, output)
+        output = process_error(f"Could not find any (new) shares", ["shares"], module_name, output)
     else:
         print_success(f"Found {found_count} (new) share(s) in total")
 
@@ -1626,7 +1677,7 @@ def run_module_enum_policy(target, creds):
     '''
     Run module enum policy.
     '''
-    module_name = "enum_policy"
+    module_name = "module_enum_policy"
     print_heading(f"Policy information for {target.host}")
     output = {}
 
@@ -1635,7 +1686,7 @@ def run_module_enum_policy(target, creds):
         target.port = port
         enum = enum_policy(target, creds)
         if enum.retval is None:
-            output = process_error(enum.retmsg, module_name, output)
+            output = process_error(enum.retmsg, ["policy"], module_name, output)
             output["policy"] = None
         else:
             print_success(enum.retmsg)
@@ -1647,13 +1698,14 @@ def run_module_enum_printers(target, creds):
     '''
     Run module enum printers.
     '''
-    module_name = "enum_printers"
+    module_name = "module_enum_printers"
     print_heading(f"Getting printer info for {target.host}")
     output = {}
 
     enum = enum_printers(target, creds)
     if enum.retval is None:
-        output = process_error(enum.retmsg, module_name, output)
+        output = process_error(enum.retmsg, ["printers"], module_name, output)
+        output["printers"] = None
     else:
         print_success(enum.retmsg)
         output["printers"] = enum.retval
@@ -1862,14 +1914,14 @@ def main():
     # Checks if host is a parent/child domain controller, try to get long domain name
     if args.L or args.A or args.As:
         result = run_module_ldapsearch(target)
-        if "long_domain" in result:
+        if not target.workgroup and result["long_domain"]:
             target.update_workgroup(result["long_domain"], True)
         output.update(result)
 
     # Try to retrieve workstation and nbtstat information
     if args.N or args.A:
         result = run_module_netbios(target)
-        if "workgroup" in result:
+        if not target.workgroup and result["workgroup"]:
             target.update_workgroup(result["workgroup"])
         output.update(result)
 
@@ -1877,11 +1929,11 @@ def main():
     result = run_module_session_check(target, creds)
     output.update(result)
     if not output.as_dict()['sessions_possible']:
-        abort(1, "Sessions failed. Aborting remainder of tests.")
+        abort(1, "Aborting remainder of tests.")
 
     # Try to get domain name and sid via lsaquery
     result = run_module_lsaquery(target, creds)
-    if "workgroup" in result:
+    if not target.workgroup and result["workgroup"]:
         target.update_workgroup(result["workgroup"])
     output.update(result)
 
