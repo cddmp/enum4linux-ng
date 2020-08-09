@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# pylint: disable=C0301, E1101
+
 ### ENUM4LINUX-NG
 # This tool is a rewrite of Mark Lowe's (former Portcullis Labs, now CiscoCXSecurity ) enum4linux.pl,
 # a tool for enumerating information from Windows and Samba systems.
@@ -43,9 +45,6 @@
 #            the right parameter when running enum4linux-ng)
 #         => or it was part of the enumeration but no session could be set up (see above), in this case the
 #            'session_possible' should be 'False'
-#
-### PYLINT
-# pylint: disable=C0301,E1101
 #
 ### FIXME
 # FIXME: Not sure if the run_something stuff is too crappy,
@@ -920,7 +919,7 @@ def check_share_access(share, target, creds):
         return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
 
     if "NT_STATUS_INVALID_INFO_CLASS" in output:
-        return Result({"mapping":"ok", "listing":"not supported"}, f"Mapping: OK, Listing: NOT SUPPORTED")
+        return Result({"mapping":"ok", "listing":"not supported"}, "Mapping: OK, Listing: NOT SUPPORTED")
 
     if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", output):
         return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
@@ -981,7 +980,7 @@ def enum_sids(users, target, creds):
 
     # Try to get SID list via lsaenumsid
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", "lsaenumsid", target.host]
-    sids_string = run(command, f"Attempting to get SIDs via lsaenumsid")
+    sids_string = run(command, "Attempting to get SIDs via lsaenumsid")
 
     if "NT_STATUS_ACCESS_DENIED" not in sids_string:
         for pattern in sid_patterns_list:
@@ -1063,21 +1062,21 @@ def enum_printers(target, creds):
     printers = {}
 
     if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
-        return Result("", f"No printer available")
+        return Result("", "No printer available")
     if "NT_STATUS_ACCESS_DENIED" in printer_info:
-        return Result(None, f"Could not get printer info via enumprinters: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not get printer info via enumprinters: NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in printer_info:
-        return Result(None, f"Could not get printer info via enumprinters: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not get printer info via enumprinters: NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
-        return Result(None, f"Could not get printer info via enumprinters: NT_STATUS_HOST_UNREACHABLE")
+        return Result(None, "Could not get printer info via enumprinters: NT_STATUS_HOST_UNREACHABLE")
     if "No printers returned." in printer_info:
         return Result({}, "No printers returned (this is not an error).")
     if not printer_info:
-        return Result({}, f"Empty response, there are no printer(s) (this is not an error, there seem to be really none)")
+        return Result({}, "Empty response, there are no printer(s) (this is not an error, there seem to be really none)")
 
     match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", printer_info, re.MULTILINE)
     if not match_list:
-        return Result(None, f"Could not parse result of enumprinters command, please open a GitHub issue")
+        return Result(None, "Could not parse result of enumprinters command, please open a GitHub issue")
 
     for match in match_list:
         flags = match[0]
@@ -1162,7 +1161,6 @@ def enum_policy(target, creds):
             policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:True})
         else:
             policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:False})
-
 
     # Domain lockout
     try:
@@ -1288,9 +1286,9 @@ def run_module_session_check(target, creds):
     module_name = "module_session_check"
     print_heading(f"Session check on {target.host}")
     output = {"null_session_possible":False,
-            "user_session_possible":False,
-            "random_user_session_possible":False,
-            "sessions_possible":False}
+              "user_session_possible":False,
+              "random_user_session_possible":False,
+              "sessions_possible":False}
 
     # Check null session
     print_info("Check for null session")
@@ -1312,7 +1310,7 @@ def run_module_session_check(target, creds):
             output = process_error(user_session.retmsg, ["user_session_possible"], module_name, output)
 
     # Check random user session
-    print_info(f"Check for random user session")
+    print_info("Check for random user session")
     user_session = check_session(target, creds, random_user_session=True)
     if user_session.retval:
         output["random_user_session_possible"] = True
@@ -1340,8 +1338,8 @@ def run_module_ldapsearch(target):
     module_name = "module_ldapsearch"
     print_heading(f"Getting information via LDAP for {target.host}")
     output = {"is_parent_dc":None,
-            "is_child_dc":None,
-            "long_domain":None}
+              "is_child_dc":None,
+              "long_domain":None}
 
     for with_tls in [False, True]:
         if with_tls:
@@ -1383,8 +1381,8 @@ def run_module_lsaquery(target, creds):
     module_name = "module_lsaquery"
     print_heading(f"Getting domain information for {target.host}")
     output = {"workgroup":None,
-            "domain_sid":None,
-            "member_of":None}
+              "domain_sid":None,
+              "member_of":None}
 
     lsaquery = run_lsaquery(target, creds)
     if lsaquery.retval is not None:
@@ -1552,7 +1550,7 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
     if output["domain_sid"]:
         sids_list = [output["domain_sid"]]
     else:
-        print_info(f"Trying to enumerate SIDs")
+        print_info("Trying to enumerate SIDs")
         sids = enum_sids(cycle_params.known_usernames, target, creds)
         if sids.retval is None:
             output = process_error(sids.retmsg, ["users", "groups", "machines"], module_name, output)
@@ -1608,7 +1606,7 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
                 output[top_level_key][rid]["details"] = details.retval
 
     if found_count["users"] == 0 and found_count["groups"] == 0 and found_count["machines"] == 0:
-        output = process_error(f"Could not find any (new) users, (new) groups or (new) machines", ["users", "groups", "machines"], module_name, output)
+        output = process_error("Could not find any (new) users, (new) groups or (new) machines", ["users", "groups", "machines"], module_name, output)
     else:
         print_success(f"Found {found_count['users']} user(s), {found_count['groups']} group(s), {found_count['machines']} machine(s) in total")
 
@@ -1674,7 +1672,7 @@ def run_module_bruteforce_shares(brute_params, target, creds):
         output = process_error(f"Failed to open {brute_params.shares_file}", ["shares"], module_name, output)
 
     if found_count == 0:
-        output = process_error(f"Could not find any (new) shares", ["shares"], module_name, output)
+        output = process_error("Could not find any (new) shares", ["shares"], module_name, output)
     else:
         print_success(f"Found {found_count} (new) share(s) in total")
 
@@ -1823,7 +1821,7 @@ def check_args(argv):
     if len(argv) == 0:
         parser.print_help()
         abort(1, "No arguments provided. Need at least argument host. Exiting.")
-    args,unknown = parser.parse_known_args(sys.argv[1:])
+    args, unknown = parser.parse_known_args(sys.argv[1:])
 
     if unknown:
         parser.print_help()
