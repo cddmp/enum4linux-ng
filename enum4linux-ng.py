@@ -1159,7 +1159,10 @@ def enum_policy(target, creds):
     pw_prop = result['Buffer']['Password']['PasswordProperties']
     for bitmask in CONST_DOMAIN_FIELDS.keys():
         if pw_prop & bitmask == bitmask:
-            policy["domain_password_information"]["pw_properties"].append(CONST_DOMAIN_FIELDS[bitmask])
+            policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:True})
+        else:
+            policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:False})
+
 
     # Domain lockout
     try:
