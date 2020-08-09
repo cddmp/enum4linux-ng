@@ -816,7 +816,7 @@ def enum_groups(grouptype, target, creds):
         return enum
 
     if not enum.retval:
-        return Result({}, f"Empty response, there were no group(s) found via '{grouptype_dict[grouptype]}' command (this is not an error, there seem to be really none)")
+        return Result({}, f"Found 0 group(s) via '{grouptype_dict[grouptype]}'")
 
     match = re.search("(group:.*)", enum.retval, re.DOTALL)
     if not match:
@@ -833,10 +833,7 @@ def enum_groups(grouptype, target, creds):
             groups[rid] = OrderedDict({"groupname":groupname, "type":grouptype})
         else:
             return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output, please open a GitHub issue")
-    if groups:
-        return Result(groups, f"Found {len(groups.keys())} groups via '{grouptype_dict[grouptype]}'")
-    # FIXME: This can propably go. Are there any cases when this is reached?
-    return Result(groups, "Empty response, there are no group(s) (this is not an error, there seem to be really none)")
+    return Result(groups, f"Found {len(groups.keys())} groups via '{grouptype_dict[grouptype]}'")
 
 def get_group_members_from_name(groupname, grouptype, rid, target, creds):
     '''
@@ -944,7 +941,7 @@ def enum_shares(target, creds):
 
     if shares:
         return Result(shares, f"Found {len(shares.keys())} share(s): {','.join(shares.keys())}")
-    return Result(shares, f"No share(s) returned for user '{creds.user}' with password '{creds.pw}' (this is not an error, there seem to be really none), try a different user")
+    return Result(shares, f"Found 0 share(s) for user '{creds.user}' with password '{creds.pw}', try a different user")
 
 def enum_sids(users, target, creds):
     '''
