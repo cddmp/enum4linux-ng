@@ -270,7 +270,7 @@ class Output:
                 if self.out_file_type == "json":
                     f.write(json.dumps(self.out_dict, indent=4))
                 elif self.out_file_type == "yaml":
-                    f.write(yaml.dump(self.out_dict))
+                    f.write(yaml.dump(self.out_dict, sort_keys=False))
                 f.close()
             except:
                 abort(1, f"An error happened trying to write {self.out_file}. Exiting.")
@@ -1150,15 +1150,16 @@ def enum_policy(target, creds):
     except:
         return Result(None, "Could not get domain password policy: RPC SamrQueryInformationDomain2() failed")
 
-    policy["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
-    policy["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
-    policy["max_pw_age"] = policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
-    policy["min_pw_age"] = policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
-    policy["pw_properties"] = []
+    policy["domain_password_information"] = {}
+    policy["domain_password_information"]["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
+    policy["domain_password_information"]["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
+    policy["domain_password_information"]["min_pw_age"] = policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
+    policy["domain_password_information"]["max_pw_age"] = policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
+    policy["domain_password_information"]["pw_properties"] = []
     pw_prop = result['Buffer']['Password']['PasswordProperties']
     for bitmask in CONST_DOMAIN_FIELDS.keys():
         if pw_prop & bitmask == bitmask:
-            policy["pw_properties"].append(CONST_DOMAIN_FIELDS[bitmask])
+            policy["domain_password_information"]["pw_properties"].append(CONST_DOMAIN_FIELDS[bitmask])
 
     # Domain lockout
     try:
@@ -1167,9 +1168,10 @@ def enum_policy(target, creds):
     except:
         return Result(None, "Could not get domain lockout policy: RPC SamrQueryInformationDomain2() failed")
 
-    policy["lockout_observation_window"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
-    policy["lockout_duration"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
-    policy["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
+    policy["domain_lockout_information"] = {}
+    policy["domain_lockout_information"]["lockout_observation_window"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
+    policy["domain_lockout_information"]["lockout_duration"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
+    policy["domain_lockout_information"]["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
 
     # Domain logoff
     try:
@@ -1178,7 +1180,8 @@ def enum_policy(target, creds):
     except:
         return Result(None, "Could not get domain logoff policy: RPC SamrQueryInformationDomain2() failed")
 
-    policy["force_logoff_time"] = policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
+    policy["domain_logoff_information"] = {}
+    policy["domain_logoff_information"]["force_logoff_time"] = policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
 
     return Result(policy, f"Found policy:\n{yaml.dump(policy, sort_keys=False).rstrip()}")
 
