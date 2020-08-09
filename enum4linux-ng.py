@@ -1180,7 +1180,7 @@ def enum_policy(target, creds):
 
     policy["force_logoff_time"] = policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
 
-    return Result(policy, f"Found policy:\n{yaml.dump(policy).rstrip()}")
+    return Result(policy, f"Found policy:\n{yaml.dump(policy, sort_keys=False).rstrip()}")
 
 # This function was copied (slightly modified) from the polenum.py source code: https://github.com/Wh1t3Fox/polenum
 # All credits to Wh1t3Fox!
