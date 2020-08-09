@@ -738,7 +738,7 @@ def enum_users_from_enumdomusers(target, creds):
         return Result(users, f"Found {len(users.keys())} via 'enumdomusers'")
     return Result(users, "Empty response, there are no user(s) (this is not an error, there seem to be really none)")
 
-def get_user_details_from_rid(rid, target, creds):
+def get_user_details_from_rid(rid, name, target, creds):
     '''
     Takes an RID and makes use of the SAMR named pipe to call QueryUserInfo() on the given RID.
     The output contains lots of information about the corresponding user account.
@@ -773,8 +773,8 @@ def get_user_details_from_rid(rid, target, creds):
                 else:
                     details[CONST_ACB_DICT[key]] = False
 
-        return Result(details, f"Found user details for user with RID {rid}")
-    return Result(None, f"Could not find user details for user with RID {rid}")
+        return Result(details, f"Found user details for user '{name}' (RID {rid})")
+    return Result(None, f"Could not find user details for user '{name}' (RID {rid})")
 
 def run_enum_groups(grouptype, target, creds):
     '''
@@ -842,29 +842,29 @@ def enum_groups(grouptype, target, creds):
     # FIXME: This can propably go. Are there any cases when this is reached?
     return Result(groups, "Empty response, there are no group(s) (this is not an error, there seem to be really none)")
 
-def get_group_members_from_name(groupname, target, creds):
+def get_group_members_from_name(groupname, rid, target, creds):
     '''
     Takes a group name as first argument and tries to enumerate the group members. This is don by using
     the 'net rpc group members' command.
     '''
     command = ["net", "rpc", "group", "members", groupname, "-W", target.workgroup, "-I", target.host, "-U", f"{creds.user}%{creds.pw}"]
-    members_string = run(command, f"Attempting to get group memberships for group {groupname}")
+    members_string = run(command, f"Attempting to get group memberships for group '{groupname}'")
 
     if not members_string:
-        return Result('', f"Empty response, there are no members for group '{groupname}' (this is not an error, there seem to be really none)")
+        return Result('', f"Empty response, there are no members for group '{groupname}' (RID {rid}) (this is not an error, there seem to be really none)")
 
     members = []
     for member in members_string.splitlines():
         if "Couldn't lookup SIDs" in member:
-            return Result(None, f"Members lookup failed for group '{groupname}' due to insufficient user permissions, try a different user")
+            return Result(None, f"Members lookup failed for group '{groupname}' (RID {rid}) due to insufficient user permissions, try a different user")
         members.append(member)
 
     if members:
-        return Result(','.join(members), f"Found {len(members)} member(s) for group '{groupname}'")
+        return Result(','.join(members), f"Found {len(members)} member(s) for group '{groupname}' (RID {rid})")
     #FIXME: This can propably go. Are there any cases when this is reached?
-    return Result(None, f"Could not find members for group '{groupname}'")
+    return Result(None, f"Could not find members for group '{groupname}' (RID {rid})")
 
-def get_group_details_from_rid(rid, target, creds):
+def get_group_details_from_rid(rid, name, target, creds):
     '''
     Takes an RID and makes use of the SAMR named pipe to open the group with OpenGroup() on the given RID.
     '''
@@ -877,7 +877,7 @@ def get_group_details_from_rid(rid, target, creds):
 
     #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
     if "NT_STATUS_NO_SUCH_GROUP" in output:
-        return Result(None, f"Could not get details for group with RID {rid}: NT_STATUS_NO_SUCH_GROUP")
+        return Result(None, f"Could not get details for group '{name}' (RID {rid}): NT_STATUS_NO_SUCH_GROUP")
 
     match = re.search("([^\n]*Group Name.*Num Members[^\n]*)", output, re.DOTALL)
     if match:
@@ -894,8 +894,8 @@ def get_group_details_from_rid(rid, target, creds):
             else:
                 details[line] = ""
 
-        return Result(details, f"Found group details for group with RID {rid}")
-    return Result(None, f"Could not find group details for group with RID {rid}")
+        return Result(details, f"Found group details for group '{name}' (RID {rid})")
+    return Result(None, f"Could not find group details for group '{name}' (RID {rid})")
 
 def check_share_access(share, target, creds):
     '''
@@ -1043,15 +1043,15 @@ def rid_cycle(sid, rid_ranges, target, creds):
                 # "(5)" = Well-known group, "(6)" = Deleted account, "(7)" = Invalid account
                 # "(8)" = Unknown, "(9)" = Machine/Computer account
                 if "(1)" in sid_and_user:
-                    yield Result({"users":{str(rid):{"username":entry}}}, f"Found user {entry}")
+                    yield Result({"users":{str(rid):{"username":entry}}}, f"Found user '{entry}' (RID {rid})")
                 elif "(2)" in sid_and_user:
-                    yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group {entry}")
+                    yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group '{entry}' (RID {rid})")
                 elif "(3)" in sid_and_user:
                     yield Result({"domain_sid":f"{sid}-{rid}"}, f"Found domain SID {sid}-{rid}")
                 elif "(4)" in sid_and_user:
-                    yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group {entry}")
+                    yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group '{entry}' (RID {rid})")
                 elif "(9)" in sid_and_user:
-                    yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine {entry}")
+                    yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
 
 def enum_printers(target, creds):
     '''
@@ -1474,7 +1474,8 @@ def run_module_enum_users(target, creds, detailed):
         if detailed:
             print_info("Enumerating users details")
             for rid in users.keys():
-                user_details = get_user_details_from_rid(rid, target, creds)
+                name = users[rid]['username']
+                user_details = get_user_details_from_rid(rid, name, target, creds)
                 if user_details.retval:
                     print_success(user_details.retmsg)
                     users[rid]["details"] = user_details.retval
@@ -1508,14 +1509,13 @@ def run_module_enum_groups(target, creds, with_members, detailed):
             groups.update(enum.retval)
 
     #FIXME: Adjust users enum stuff above so that it looks similar to this one?
-    #FIXME: One function now uses the groupname while the other uses the RID, make at least the output equal
     if groups:
         if with_members:
             print_info("Enumerating group members")
             for rid in groups.keys():
                 # Get group members
                 groupname = groups[rid]['groupname']
-                group_members = get_group_members_from_name(groupname, target, creds)
+                group_members = get_group_members_from_name(groupname, rid, target, creds)
                 if group_members.retval or group_members.retval == '':
                     print_success(group_members.retmsg)
                     groups[rid]["members"] = group_members.retval
@@ -1526,7 +1526,8 @@ def run_module_enum_groups(target, creds, with_members, detailed):
         if detailed:
             print_info("Enumerating group details")
             for rid in groups.keys():
-                details = get_group_details_from_rid(rid, target, creds)
+                name = groups[rid]["groupname"]
+                details = get_group_details_from_rid(rid, name, target, creds)
 
                 if details.retval:
                     print_success(details.retmsg)
@@ -1594,10 +1595,12 @@ def run_module_rid_cycling(cycle_params, target, creds, detailed):
             if detailed and ("users" in top_level_key or "groups" in top_level_key):
                 if "users" in top_level_key:
                     rid, entry = list(result.retval["users"].items())[0]
-                    details = get_user_details_from_rid(rid, target, creds)
+                    name = entry["username"]
+                    details = get_user_details_from_rid(rid, name, target, creds)
                 elif "groups" in top_level_key:
                     rid, entry = list(result.retval["groups"].items())[0]
-                    details = get_group_details_from_rid(rid, target, creds)
+                    name = entry["groupname"]
+                    details = get_group_details_from_rid(rid, name, target, creds)
 
                 if details.retval:
                     print_success(details.retmsg)
