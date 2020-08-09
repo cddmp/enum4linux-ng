@@ -709,9 +709,7 @@ def enum_users_from_querydispinfo(target, creds):
             users[rid] = OrderedDict({"username":username, "name":name, "acb":acb, "description":description})
         else:
             return Result(None, "Could not extract users from querydispinfo output, please open a GitHub issue")
-    if users:
-        return Result(users, f"Found {len(users.keys())} via 'querydispinfo'")
-    return Result(users, "Empty response, there are no user(s) (this is not an error, there seem to be really none)")
+    return Result(users, f"Found {len(users.keys())} users via 'querydispinfo'")
 
 def enum_users_from_enumdomusers(target, creds):
     '''
@@ -734,9 +732,7 @@ def enum_users_from_enumdomusers(target, creds):
             users[rid] = {"username":username}
         else:
             return Result(None, "Could not extract users from eumdomusers output, please open a GitHub issue")
-    if users:
-        return Result(users, f"Found {len(users.keys())} via 'enumdomusers'")
-    return Result(users, "Empty response, there are no user(s) (this is not an error, there seem to be really none)")
+    return Result(users, f"Found {len(users.keys())} users via 'enumdomusers'")
 
 def get_user_details_from_rid(rid, name, target, creds):
     '''
