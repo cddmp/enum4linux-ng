@@ -373,7 +373,7 @@ def run_nmblookup(host):
     nmblookup_result = run(command, "Trying to get NetBIOS names information")
 
     if "No reply from" in nmblookup_result:
-        return Result(None, "Could not get NetBIOS names information via nmblookup: host does not reply")
+        return Result(None, "Could not get NetBIOS names information via 'nmblookup': host does not reply")
     return Result(nmblookup_result, "")
 
 def get_workgroup_from_nmblookup(nmblookup_result):
@@ -546,13 +546,13 @@ def run_lsaquery(target, creds):
     lsaquery_result = run(command, "Attempting to get domain SID")
 
     if "NT_STATUS_LOGON_FAILURE" in lsaquery_result:
-        return Result(None, "Could not get domain information via lsaquery: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not get domain information via 'lsaquery': NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_ACCESS_DENIED" in lsaquery_result:
-        return Result(None, "Could not get domain information via lsaquery: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not get domain information via 'lsaquery': NT_STATUS_ACCESS_DENIED")
 
     if lsaquery_result:
         return Result(lsaquery_result, "")
-    return Result(None, "Could not get information via lsaquery")
+    return Result(None, "Could not get information via 'lsaquery'")
 
 def check_is_part_of_workgroup_or_domain(lsaquery_result):
     '''
@@ -612,11 +612,11 @@ def run_srvinfo(target, creds):
     srvinfo_result = run(command, "Attempting to get OS info with command")
 
     if "NT_STATUS_ACCESS_DENIED" in srvinfo_result:
-        return Result(None, "Could not get OS info via srvinfo: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in srvinfo_result:
-        return Result(None, "Could not get OS info via srvinfo: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_IO_TIMEOUT" in srvinfo_result:
-        return Result(None, "Could not get OS info via srvinfo: NT_STATUS_IO_TIMEOUT")
+        return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_IO_TIMEOUT")
     return Result(srvinfo_result, "")
 
 # FIXME: Evaluate server_type_string
@@ -660,11 +660,11 @@ def run_querydispinfo(target, creds):
     querydispinfo_result = run(command, "Attempting to get userlist")
 
     if "NT_STATUS_ACCESS_DENIED" in querydispinfo_result:
-        return Result(None, "Could not find users via querydispinfo: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in querydispinfo_result:
-        return Result(None, "Could not find users via querydispinfo: NT_STATUS_INVALID_PARAMETER")
+        return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_INVALID_PARAMETER")
     if "NT_STATUS_LOGON_FAILURE" in querydispinfo_result:
-        return Result(None, "Could not find users via querydispinfo: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_LOGON_FAILURE")
     return Result(querydispinfo_result, "")
 
 def run_enumdomusers(target, creds):
@@ -678,11 +678,11 @@ def run_enumdomusers(target, creds):
     enumdomusers_result = run(command, "Attempting to get userlist")
 
     if "NT_STATUS_ACCESS_DENIED" in enumdomusers_result:
-        return Result(None, "Could not find users via enumdomusers: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_INVALID_PARAMETER" in enumdomusers_result:
-        return Result(None, "Could not find users via enumdomusers: NT_STATUS_INVALID_PARAMETER")
+        return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_INVALID_PARAMETER")
     if "NT_STATUS_LOGON_FAILURE" in enumdomusers_result:
-        return Result(None, "Could not find users via enumdomusers: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_LOGON_FAILURE")
     return Result(enumdomusers_result, "")
 
 def enum_users_from_querydispinfo(target, creds):
@@ -794,9 +794,9 @@ def run_enum_groups(grouptype, target, creds):
     groups_string = run(command, f"Attempting to get {grouptype} groups")
 
     if "NT_STATUS_ACCESS_DENIED" in groups_string:
-        return Result(None, f"Could not get groups via {grouptype_dict[grouptype]}: NT_STATUS_ACCESS_DENIED")
+        return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in groups_string:
-        return Result(None, f"Could not get groups via {grouptype_dict[grouptype]}: NT_STATUS_LOGON_FAILURE")
+        return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': NT_STATUS_LOGON_FAILURE")
     return Result(groups_string, "")
 
 def enum_groups(grouptype, target, creds):
@@ -820,7 +820,7 @@ def enum_groups(grouptype, target, creds):
         return enum
 
     if not enum.retval:
-        return Result({}, f"Empty response, there were no group(s) found via {grouptype_dict[grouptype]} command (this is not an error, there seem to be really none)")
+        return Result({}, f"Empty response, there were no group(s) found via '{grouptype_dict[grouptype]}' command (this is not an error, there seem to be really none)")
 
     match = re.search("(group:.*)", enum.retval, re.DOTALL)
     if not match:
@@ -980,7 +980,7 @@ def enum_sids(users, target, creds):
 
     # Try to get SID list via lsaenumsid
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", "lsaenumsid", target.host]
-    sids_string = run(command, "Attempting to get SIDs via lsaenumsid")
+    sids_string = run(command, "Attempting to get SIDs via 'lsaenumsid'")
 
     if "NT_STATUS_ACCESS_DENIED" not in sids_string:
         for pattern in sid_patterns_list:
@@ -1064,11 +1064,11 @@ def enum_printers(target, creds):
     if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
         return Result("", "No printer available")
     if "NT_STATUS_ACCESS_DENIED" in printer_info:
-        return Result(None, "Could not get printer info via enumprinters: NT_STATUS_ACCESS_DENIED")
+        return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_ACCESS_DENIED")
     if "NT_STATUS_LOGON_FAILURE" in printer_info:
-        return Result(None, "Could not get printer info via enumprinters: NT_STATUS_LOGON_FAILURE")
+        return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_LOGON_FAILURE")
     if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
-        return Result(None, "Could not get printer info via enumprinters: NT_STATUS_HOST_UNREACHABLE")
+        return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_HOST_UNREACHABLE")
     if "No printers returned." in printer_info:
         return Result({}, "No printers returned (this is not an error).")
     if not printer_info:
