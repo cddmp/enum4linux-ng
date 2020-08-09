@@ -1211,7 +1211,8 @@ def policy_to_human(low, high, lockout=False):
     try:
         minutes = datetime.utcfromtimestamp(tmp).minute
         hours = datetime.utcfromtimestamp(tmp).hour
-        days = datetime.utcfromtimestamp(tmp).day - 1
+        time_diff = datetime.utcfromtimestamp(tmp) - datetime.utcfromtimestamp(0)
+        days = time_diff.days
     except:
         return "invalid time"
 
