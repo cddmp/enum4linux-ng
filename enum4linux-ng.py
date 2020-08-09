@@ -773,8 +773,8 @@ def get_user_details_from_rid(rid, name, target, creds):
                 else:
                     details[CONST_ACB_DICT[key]] = False
 
-        return Result(details, f"Found user details for user '{name}' (RID {rid})")
-    return Result(None, f"Could not find user details for user '{name}' (RID {rid})")
+        return Result(details, f"Found details for user '{name}' (RID {rid})")
+    return Result(None, f"Could not find details for user '{name}' (RID {rid})")
 
 def run_enum_groups(grouptype, target, creds):
     '''
