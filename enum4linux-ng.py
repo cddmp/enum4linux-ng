@@ -247,21 +247,28 @@ class Output:
     def update(self, content):
         # The following is needed, since python3 does not support nested merge of
         # dictionaries out of the box:
-        # Temporarily save the "errors" sub dict. This will make sure we don't lose
-        # any errors from previous module runs.
-        errors_dict = self.out_dict["errors"]
-        # Overwrite all sub dicts in out_dict (e.g. "users" or "groups") with the
-        # updated ones. Here we would normally lose all errors, if "content" had
-        # an "errors" dict.
+
+        # Temporarily save the current "errors" sub dict. Then update out_dict with the new
+        # content. If "content" also had an "errors" dict (e.g. if the module run failed),
+        # this would overwrite the "errors" dict from the previous run. Therefore,
+        # we replace the old out_dict["errors"] with the saved one. A proper merge will
+        # then be done further down.
+        old_errors_dict = self.out_dict["errors"]
         self.out_dict.update(content)
-        # Make sure "errors" is the last sub dict in out_dict. This is just needed
-        # for nice JSON/YAML output.
-        self.out_dict.move_to_end("errors")
-        # Finally check, did the last module run produce errors?
-        # If so, merge the error dicts and append the result to out_dict.
+        self.out_dict["errors"] = old_errors_dict
+
+        # Merge dicts
         if "errors" in content:
-            errors = {**errors_dict, **content["errors"]}
-            self.out_dict["errors"] = errors
+            new_errors_dict = content["errors"].copy()
+
+            for key, value in new_errors_dict.items():
+                if key in old_errors_dict:
+                    self.out_dict["errors"][key] = {**old_errors_dict[key],**new_errors_dict[key]}
+                else:
+                    self.out_dict["errors"][key] = value
+
+        # Only for nice JSON/YAML output (errors at the end)
+        self.out_dict.move_to_end("errors")
 
         if self.out_file is not None:
             try:
