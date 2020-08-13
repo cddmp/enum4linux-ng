@@ -303,7 +303,7 @@ class RidCycleParams:
             else:
                 self.enumerated_input[key] = None
 
-        if "domain_sid" in enum_input and enum_input["domain_sid"] is not "NULL SID":
+        if "domain_sid" in enum_input and "NULL SID" not in enum_input["domain_sid"]:
             self.enumerated_input["domain_sid"] = enum_input["domain_sid"]
         else:
             self.enumerated_input["domain_sid"] = ""
