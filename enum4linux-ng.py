@@ -902,6 +902,9 @@ def check_share_access(share, target, creds):
     "listing" can bei either OK, DENIED, N/A or NOT SUPPORTED. N/A means directory listing
     is not allowed, while NOT SUPPORTED means the share does not support listing at all.
     This is the case for shares like IPC$ which is used for remote procedure calls.
+
+    In order to enumerate access permissions, smbclient is used with the "dir" command.
+    In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
     '''
     command = ["smbclient", "-W", target.workgroup, f"//{target.host}/{share}", "-U", f"{creds.user}%{creds.pw}", "-c", "dir"]
     output = run(command, f"Attempting to map share //{target.host}/{share}")
@@ -918,24 +921,22 @@ def check_share_access(share, target, creds):
     if "NT_STATUS_INVALID_INFO_CLASS" in output:
         return Result({"mapping":"ok", "listing":"not supported"}, "Mapping: OK, Listing: NOT SUPPORTED")
 
-    if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", output):
-        return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
-
     if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in output:
         return Result(None, "Could not check share: NT_STATUS_OBJECT_NAME_NOT_FOUND")
 
     if "NT_STATUS_INVALID_PARAMETER" in output:
         return Result(None, "Could not check share: NT_STATUS_INVALID_PARAMETER")
 
-    return Result(None, "Could not understand smbclient response")
+    if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", output) or re.search(r".*blocks\sof\ssize.*blocks\savailable.*", output):
+        return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
+
+    return Result(None, "Could not parse result of smbclient command, please open a GitHub issue")
 
 def enum_shares(target, creds):
     '''
     Tries to enumerate shares with the given username and password. It does this running the smbclient command.
     smbclient will open a connection to the Server Service Remote Protocol named pipe (srvsvc). Once connected
     it calls the NetShareEnumAll() to get a list of shares.
-    For the list of resulting shares, smbclient is used again with the "dir" command. In the background this will
-    send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
     '''
     command = ["smbclient", "-W", target.workgroup, "-L", f"//{target.host}", "-U", f"{creds.user}%{creds.pw}"]
     shares_result = run(command, "Attempting to get share list using authentication")
