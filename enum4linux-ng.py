@@ -1238,7 +1238,7 @@ def run_module_netbios(target):
     Run NetBIOS module which collects Netbios names and the workgroup.
     '''
     module_name = "module_netbios"
-    print_heading(f"Getting NetBIOS names for {target.host}")
+    print_heading(f"NetBIOS names and Workgroup for {target.host}")
     output = {"workgroup":None, "nmblookup":None}
 
     nmblookup = run_nmblookup(target.host)
@@ -1315,7 +1315,7 @@ def run_module_ldapsearch(target):
     the LDAP RootDSE.
     '''
     module_name = "module_ldapsearch"
-    print_heading(f"Getting information via LDAP for {target.host}")
+    print_heading(f"Information via LDAP for {target.host}")
     output = {"is_parent_dc":None,
               "is_child_dc":None,
               "long_domain":None}
@@ -1358,7 +1358,7 @@ def run_module_lsaquery(target, creds):
     the domain/workgroup name, domain SID and the membership type.
     '''
     module_name = "module_lsaquery"
-    print_heading(f"Getting domain information for {target.host}")
+    print_heading(f"Domain information for {target.host}")
     output = {"workgroup":None,
               "domain_sid":None,
               "member_of":None}
@@ -1689,7 +1689,7 @@ def run_module_enum_printers(target, creds):
     Run module enum printers.
     '''
     module_name = "module_enum_printers"
-    print_heading(f"Getting printer info for {target.host}")
+    print_heading(f"Printer information for {target.host}")
     output = {}
 
     enum = enum_printers(target, creds)
