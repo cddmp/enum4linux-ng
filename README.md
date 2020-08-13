@@ -24,6 +24,11 @@ Supported Python versions: 3.6, 3.7, 3.8
 
 If you prefer a Docker based installation, an example run can be found [below](#Docker).
 
+### Demo
+This demonstrates a run against Windows Server 2012 R2 standard installation. A user 'Tester' with password 'Start123!' was created. Firewall access was allowed.
+
+![Demo](demo/demo.gif)
+
 ## Installing dependencies
 The tool uses the samba clients tools, namely:
 - nmblookup
