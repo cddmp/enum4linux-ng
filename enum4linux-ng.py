@@ -263,7 +263,7 @@ class Output:
 
             for key, value in new_errors_dict.items():
                 if key in old_errors_dict:
-                    self.out_dict["errors"][key] = {**old_errors_dict[key],**new_errors_dict[key]}
+                    self.out_dict["errors"][key] = {**old_errors_dict[key], **new_errors_dict[key]}
                 else:
                     self.out_dict["errors"][key] = value
 
