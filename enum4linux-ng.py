@@ -472,16 +472,6 @@ def check_session(target, creds, random_user_session=False):
         return Result(True, f"Server allows session using username '{user}', password '{pw}'")
     return Result(False, f"Server doesn't allow session using username '{user}', password '{pw}'")
 
-    #FIXME: The code snippet below is a 1:1 translation from the original perl code.
-    #       I tested the code against various machines. The smbclient command output
-    #       will never contain a "Domain=.*" string. I still left it in here, in case
-    #       I have something overlooked.
-    #if not workgroup:
-    #    match = re.search("Domain=\[([^]]*)\]",session_output)
-    #    if match and valid_workgroup(match.group[1]):
-    #        workgroup = match.group[1]
-    #        print(f"[+] Got domain/workgroup name: {workgroup}")
-
 def get_namingcontexts(target):
     '''
     Tries to connect to LDAP/LDAPS. If successful, it tries to get the naming contexts from
@@ -608,15 +598,6 @@ def run_srvinfo(target, creds):
     NetSrvGetInfo() on the target. This will return OS information (OS version, platform id,
     server type).
     '''
-    #FIXME: The code snippet below is a 1:1 translation from the original perl code.
-    #       I tested the code against various machines. The smbclient command output
-    #       will never contain a "Domain=.*" string. I still left it in here, in case
-    #       I have something overlooked.
-    #command = ['smbclient', '-W', workgroup, f'//{host}/ipc$', '-U', f'{user}%{pw}', '-c', 'q']
-    #output = run(command,"Attempting to get OS information")
-    #match = re.search('(Domain=[^\n]+)',output)
-    #if match:
-    #    print(f"[+] Got OS info for {host} from smbclient: {match.group(1)}")
 
     command = ["rpcclient", "-W", target.workgroup, '-U', f'{creds.user}%{creds.pw}', '-c', 'srvinfo', target.host]
     srvinfo_result = run(command, "Attempting to get OS info with command")
