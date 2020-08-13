@@ -303,7 +303,7 @@ class RidCycleParams:
             else:
                 self.enumerated_input[key] = None
 
-        if "domain_sid" in enum_input:
+        if "domain_sid" in enum_input and enum_input["domain_sid"] is not "NULL SID":
             self.enumerated_input["domain_sid"] = enum_input["domain_sid"]
         else:
             self.enumerated_input["domain_sid"] = ""
@@ -566,8 +566,8 @@ def check_is_part_of_workgroup_or_domain(lsaquery_result):
     Takes the result of rpclient's lsaquery command and tries to determine from the result whether the host
     is part of a domain or workgroup.
     '''
-    if "Domain Sid: S-0-0" in lsaquery_result:
-        return Result("workgroup", "[+] Host is part of a workgroup (not a domain)")
+    if "Domain Sid: S-0-0" or "Domain Sid: (NULL SID)" in lsaquery_result:
+        return Result("workgroup", "Host is part of a workgroup (not a domain)")
     if re.search(r"Domain Sid: S-\d+-\d+-\d+-\d+-\d+-\d+", lsaquery_result):
         return Result("domain", "Host is part of a domain (not a workgroup)")
     return Result(False, "Could not determine if host is part of domain or part of a workgroup")
@@ -592,9 +592,12 @@ def get_domain_sid_from_lsaquery(lsaquery_result):
     Takes the result of rpclient's lsaquery command and tries to extract the domain SID.
     '''
     domain_sid = ""
-    match = re.search(r"Domain Sid: (S-\d+-\d+-\d+-\d+-\d+-\d+)", lsaquery_result)
-    if match:
-        domain_sid = match.group(1)
+    if "Domain Sid: (NULL SID)" in lsaquery_result:
+        domain_sid = "NULL SID"
+    else:
+        match = re.search(r"Domain Sid: (S-\d+-\d+-\d+-\d+-\d+-\d+)", lsaquery_result)
+        if match:
+            domain_sid = match.group(1)
     if domain_sid:
         return Result(domain_sid, f"SID: {domain_sid}")
     return Result(None, "Could not get domain SID from lsaquery")
@@ -958,7 +961,7 @@ def enum_sids(users, target, creds):
     sid_patterns_list = [r"(S-1-5-21-[\d-]+)-\d+", r"(S-1-5-[\d-]+)-\d+", r"(S-1-22-[\d-]+)-\d+"]
 
     # Try to get a valid SID from well-known user names
-    for known_username in users:
+    for known_username in users.split(','):
         command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"lookupnames {known_username}"]
         sid_string = run(command, f"Attempting to get SID for user {known_username}")
 
