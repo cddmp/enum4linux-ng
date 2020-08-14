@@ -190,7 +190,7 @@ class Result:
 
 class Target:
     '''
-    Target encapsulated target information like host name or ip, workgroup name, port number
+    Target encapsulates target information like host name or ip, workgroup name, port number
     or whether Transport Layer Security (TLS) is used or not.
     '''
     def __init__(self, host, workgroup, port=None, timeout=None, tls=None):
