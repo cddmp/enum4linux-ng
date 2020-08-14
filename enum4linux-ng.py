@@ -1264,10 +1264,10 @@ def run_module_session_check(target, creds):
     '''
     module_name = "module_session_check"
     print_heading(f"Session check on {target.host}")
-    output = {"null_session_possible":False,
+    output = {"sessions_possible":False,
+              "null_session_possible":False,
               "user_session_possible":False,
-              "random_user_session_possible":False,
-              "sessions_possible":False}
+              "random_user_session_possible":False}
 
     # Check null session
     print_info("Check for null session")
@@ -1298,9 +1298,7 @@ def run_module_session_check(target, creds):
     else:
         output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
 
-    if ("null_session_possible" in output and output["null_session_possible"]) or \
-        ("user_session_possible" in output and output["user_session_possible"]) or \
-        ("random_user_session_possible" in output and output["random_user_session_possible"]):
+    if output["null_session_possible"] or output["user_session_possible"] or output["random_user_session_possible"]:
         output["sessions_possible"] = True
     else:
         output["sessions_possible"] = False
