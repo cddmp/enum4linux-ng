@@ -259,7 +259,7 @@ class Output:
 
         # Merge dicts
         if "errors" in content:
-            new_errors_dict = content["errors"].copy()
+            new_errors_dict = content["errors"]
 
             for key, value in new_errors_dict.items():
                 if key in old_errors_dict:
@@ -344,7 +344,7 @@ def print_info(msg):
 def print_verbose(msg):
     print(f"[V] {msg}")
 
-def process_error(msg, entries, module_name, output_dict):
+def process_error(msg, affected_entries, module_name, output_dict):
     '''
     Helper function to print error and update output dictionary at the same time.
     '''
@@ -353,14 +353,14 @@ def process_error(msg, entries, module_name, output_dict):
     if not "errors" in output_dict:
         output_dict["errors"] = {}
 
-    for entry in entries:
+    for entry in affected_entries:
         if not entry in output_dict["errors"]:
-            output_dict["errors"] = {entry: {}}
+            output_dict["errors"].update({entry: {}})
 
         if not module_name in output_dict["errors"][entry]:
-            output_dict["errors"][entry] = {module_name: []}
+            output_dict["errors"][entry].update({module_name: []})
 
-        output_dict["errors"][entry][module_name] += [msg]
+        output_dict["errors"][entry][module_name].append(msg)
     return output_dict
 
 def abort(code, msg):
