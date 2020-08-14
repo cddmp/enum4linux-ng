@@ -946,6 +946,9 @@ def enum_shares(target, creds):
     if "NT_STATUS_ACCESS_DENIED" in shares_result:
         return Result(None, "Could not list shares: NT_STATUS_ACCESS_DENIED")
 
+    if "NT_STATUS_LOGON_FAILURE" in shares_result:
+        return Result(None, "Could not list shares: NT_STATUS_LOGON_FAILURE")
+
     shares = {}
     match_list = re.findall(r"\n\s*([ \S]+?)\s+(?:Disk|IPC|Printer)", shares_result, re.IGNORECASE)
     if match_list:
