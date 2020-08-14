@@ -899,7 +899,7 @@ def check_share_access(share, target, creds):
     if "tree connect failed: NT_STATUS_ACCESS_DENIED" in output:
         return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
 
-    if "NT_STATUS_INVALID_INFO_CLASS" in output:
+    if "NT_STATUS_INVALID_INFO_CLASS" in output or "NT_STATUS_NETWORK_ACCESS_DENIED" in output:
         return Result({"mapping":"ok", "listing":"not supported"}, "Mapping: OK, Listing: NOT SUPPORTED")
 
     if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in output:
