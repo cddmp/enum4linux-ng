@@ -438,6 +438,9 @@ def check_legacy_session(target, creds):
     command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{creds.user}%{creds.pw}', '-c', 'help']
     session_output = run(command, "Check for legacy session (support for SMBv1 only)")
 
+    if "NT_STATUS_CONNECTION_REFUSED" in session_output:
+        return Result(None, "Server doesn't allow legacy null session: NT_STATUS_CONNECTION_REFUSED")
+
     if "NT_STATUS_CONNECTION_DISCONNECTED" in session_output:
         try:
             smb = smbconnection.SMBConnection(target.host, target.host)
@@ -445,8 +448,8 @@ def check_legacy_session(target, creds):
                 smb.close()
                 return Result(True, "Server supports only SMBv1")
         except:
-            pass
-    return Result(False, "Server supports dialects higher SMBv1")
+            return Result(False, "Server supports dialects higher SMBv1")
+    return Result(None, "Server doesn't allow legacy null session.")
 
 def check_session(target, creds, random_user_session=False):
     '''
@@ -1303,11 +1306,14 @@ def run_module_session_check(target, creds):
     # Check for legacy session
     print_info("Check for legacy session (SMBv1)")
     legacy_session = check_legacy_session(target, Credentials('', ''))
-    output["legacy_session"] = legacy_session.retval
-    print_success(legacy_session.retmsg)
-    if legacy_session.retval:
-        print_info("Switching to legacy mode for further enumeration")
-    target.legacy = legacy_session.retval
+    if legacy_session.retval is None:
+        output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
+    else:
+        output["legacy_session"] = legacy_session.retval
+        print_success(legacy_session.retmsg)
+        if legacy_session.retval:
+            print_info("Switching to legacy mode for further enumeration")
+        target.legacy = legacy_session.retval
 
     # Check null session
     print_info("Check for null session")
