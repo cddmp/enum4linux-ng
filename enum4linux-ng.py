@@ -428,28 +428,27 @@ def nmblookup_to_human(nmblookup_result):
             output.append(line)
     return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
 
-def check_legacy_session(target, creds):
+def check_legacy_session(target):
     '''
     Current implementations of the samba client tools will enforce at least SMBv2 by default. This will give false
     negatives during session checks, if the target only supports SMBv1. Therefore, we try to find out here whether
     the target system only speaks SMBv1.
     '''
 
-    command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{creds.user}%{creds.pw}', '-c', 'help']
-    session_output = run(command, "Check for legacy session (support for SMBv1 only)")
-
-    if "NT_STATUS_CONNECTION_REFUSED" in session_output:
-        return Result(None, "Server doesn't allow legacy null session: NT_STATUS_CONNECTION_REFUSED")
-
-    if "NT_STATUS_CONNECTION_DISCONNECTED" in session_output:
-        try:
-            smb = smbconnection.SMBConnection(target.host, target.host)
-            if smb.getDialect() == "NT LM 0.12":
-                smb.close()
-                return Result(True, "Server supports only SMBv1")
-        except:
-            return Result(False, "Server supports dialects higher SMBv1")
-    return Result(None, "Server doesn't allow legacy null session.")
+    try:
+        smb = smbconnection.SMBConnection(target.host, target.host)
+        dialect = smb.getDialect()
+        smb.close()
+        if dialect == smbconnection.SMB_DIALECT:
+            return Result(True, "Server supports only SMBv1")
+        return Result(False, "Server supports dialects higher SMBv1")
+    except Exception as e:
+        if len(e.args) == 2 and isinstance(e.args[1], ConnectionRefusedError):
+            if e.args[1].errno == 111:
+                error = "Connection refused"
+            return Result(None, f"SMB connection error: {error}")
+        else:
+            return Result(None, f"SMB connection error")
 
 def check_session(target, creds, random_user_session=False):
     '''
@@ -1305,7 +1304,7 @@ def run_module_session_check(target, creds):
 
     # Check for legacy session
     print_info("Check for legacy session (SMBv1)")
-    legacy_session = check_legacy_session(target, Credentials('', ''))
+    legacy_session = check_legacy_session(target)
     if legacy_session.retval is None:
         output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
     else:
