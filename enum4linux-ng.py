@@ -892,7 +892,7 @@ def get_group_details_from_rid(rid, groupname, grouptype, target, creds):
 
     details = OrderedDict()
     command = ["rpcclient", "-W", target.workgroup, "-U", f'{creds.user}%{creds.pw}', "-c", f"querygroup {rid}", target.host]
-    output = run(command, "Attempting to get detailed group info". target.samba_config)
+    output = run(command, "Attempting to get detailed group info", target.samba_config)
 
     #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
     if "NT_STATUS_NO_SUCH_GROUP" in output:
