@@ -27,7 +27,7 @@ If you prefer a Docker based installation, an example run can be found [below](#
 ### Demo
 This demonstrates a run against Windows Server 2012 R2 standard installation. A user 'Tester' with password 'Start123!' was created. Firewall access was allowed.
 
-![Demo](demo/demo.gif)
+![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo.gif)
 
 ## Installing dependencies
 The tool uses the samba clients tools, namely:
