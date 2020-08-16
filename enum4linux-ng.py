@@ -71,6 +71,7 @@ import re
 import shutil
 import shlex
 import subprocess
+import tempfile
 import sys
 from datetime import datetime
 from collections import OrderedDict
@@ -188,18 +189,35 @@ class Result:
         self.retval = retval
         self.retmsg = retmsg
 
+class SambaConfig:
+    def __init__(self, entries):
+        config = '\n'.join(entries)
+        config_file = tempfile.NamedTemporaryFile(delete=False)
+        config_file.write(config.encode())
+        self.config_filename = config_file.name
+        config_file.close()
+
+    def get_path(self):
+        return self.config_filename
+
+    def __del__(self):
+        try:
+            os.remove(self.config_filename)
+        except OSError:
+            pass
+
 class Target:
     '''
     Target encapsulates target information like host name or ip, workgroup name, port number
     or whether Transport Layer Security (TLS) is used or not.
     '''
-    def __init__(self, host, workgroup, port=None, timeout=None, tls=None, legacy=False):
+    def __init__(self, host, workgroup, port=None, timeout=None, tls=None, samba_config=None):
         self.host = host
         self.port = port
         self.workgroup = workgroup
         self.timeout = timeout
         self.tls = tls
-        self.legacy = legacy
+        self.samba_config = samba_config
 
         self.workgroup_from_long_domain = False
 
@@ -484,7 +502,7 @@ def check_session(target, creds, random_user_session=False):
         session_type = "user"
 
     command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
-    session_output = run(command, "Attempting to make session", target.legacy)
+    session_output = run(command, "Attempting to make session", target.samba_config)
 
     match = re.search(r"do_connect:.*failed\s\(Error\s([^)]+)\)", session_output)
     if match:
@@ -563,7 +581,7 @@ def run_lsaquery(target, creds):
     (SID).
     '''
     command = ['rpcclient', '-W', target.workgroup, '-U', f'{creds.user}%{creds.pw}', target.host, '-c', 'lsaquery']
-    lsaquery_result = run(command, "Attempting to get domain SID", target.legacy)
+    lsaquery_result = run(command, "Attempting to get domain SID", target.samba_config)
 
     if "NT_STATUS_LOGON_FAILURE" in lsaquery_result:
         return Result(None, "Could not get domain information via 'lsaquery': NT_STATUS_LOGON_FAILURE")
@@ -623,7 +641,7 @@ def run_srvinfo(target, creds):
     '''
 
     command = ["rpcclient", "-W", target.workgroup, '-U', f'{creds.user}%{creds.pw}', '-c', 'srvinfo', target.host]
-    srvinfo_result = run(command, "Attempting to get OS info with command", target.legacy)
+    srvinfo_result = run(command, "Attempting to get OS info with command", target.samba_config)
 
     if "NT_STATUS_ACCESS_DENIED" in srvinfo_result:
         return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_ACCESS_DENIED")
@@ -671,7 +689,7 @@ def run_querydispinfo(target, creds):
     description of the account.
     '''
     command = ['rpcclient', '-W', target.workgroup, '-c', 'querydispinfo', '-U', f'{creds.user}%{creds.pw}', target.host]
-    querydispinfo_result = run(command, "Attempting to get userlist", target.legacy)
+    querydispinfo_result = run(command, "Attempting to get userlist", target.samba_config)
 
     if "NT_STATUS_ACCESS_DENIED" in querydispinfo_result:
         return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_ACCESS_DENIED")
@@ -689,7 +707,7 @@ def run_enumdomusers(target, creds):
     1 enumeration is no longer possible.
     '''
     command = ["rpcclient", "-W", target.workgroup, "-c", "enumdomusers", "-U", f"{creds.user}%{creds.pw}", target.host]
-    enumdomusers_result = run(command, "Attempting to get userlist", target.legacy)
+    enumdomusers_result = run(command, "Attempting to get userlist", target.samba_config)
 
     if "NT_STATUS_ACCESS_DENIED" in enumdomusers_result:
         return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_ACCESS_DENIED")
@@ -758,7 +776,7 @@ def get_user_details_from_rid(rid, name, target, creds):
 
     details = OrderedDict()
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", f"queryuser {rid}", target.host]
-    output = run(command, "Attempting to get detailed user info", target.legacy)
+    output = run(command, "Attempting to get detailed user info", target.samba_config)
 
     match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", output, re.DOTALL)
     if match:
@@ -801,7 +819,7 @@ def run_enum_groups(grouptype, target, creds):
         return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
 
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"{grouptype_dict[grouptype]}"]
-    groups_string = run(command, f"Attempting to get {grouptype} groups", target.legacy)
+    groups_string = run(command, f"Attempting to get {grouptype} groups", target.samba_config)
 
     if "NT_STATUS_ACCESS_DENIED" in groups_string:
         return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': NT_STATUS_ACCESS_DENIED")
@@ -855,7 +873,7 @@ def get_group_members_from_name(groupname, grouptype, rid, target, creds):
     the 'net rpc group members' command.
     '''
     command = ["net", "rpc", "group", "members", groupname, "-W", target.workgroup, "-I", target.host, "-U", f"{creds.user}%{creds.pw}"]
-    members_string = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", target.legacy)
+    members_string = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", target.samba_config)
 
     members = []
     for member in members_string.splitlines():
@@ -874,7 +892,7 @@ def get_group_details_from_rid(rid, groupname, grouptype, target, creds):
 
     details = OrderedDict()
     command = ["rpcclient", "-W", target.workgroup, "-U", f'{creds.user}%{creds.pw}', "-c", f"querygroup {rid}", target.host]
-    output = run(command, "Attempting to get detailed group info". target.legacy)
+    output = run(command, "Attempting to get detailed group info". target.samba_config)
 
     #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
     if "NT_STATUS_NO_SUCH_GROUP" in output:
@@ -911,7 +929,7 @@ def check_share_access(share, target, creds):
     In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
     '''
     command = ["smbclient", "-W", target.workgroup, f"//{target.host}/{share}", "-U", f"{creds.user}%{creds.pw}", "-c", "dir"]
-    output = run(command, f"Attempting to map share //{target.host}/{share}", target.legacy)
+    output = run(command, f"Attempting to map share //{target.host}/{share}", target.samba_config)
 
     if "NT_STATUS_BAD_NETWORK_NAME" in output:
         return Result(None, "Share doesn't exist")
@@ -943,7 +961,7 @@ def enum_shares(target, creds):
     it calls the NetShareEnumAll() to get a list of shares.
     '''
     command = ["smbclient", "-W", target.workgroup, "-L", f"//{target.host}", "-U", f"{creds.user}%{creds.pw}"]
-    shares_result = run(command, "Attempting to get share list using authentication", target.legacy)
+    shares_result = run(command, "Attempting to get share list using authentication", target.samba_config)
 
     if "NT_STATUS_ACCESS_DENIED" in shares_result:
         return Result(None, "Could not list shares: NT_STATUS_ACCESS_DENIED")
@@ -971,7 +989,7 @@ def enum_sids(users, target, creds):
     # Try to get a valid SID from well-known user names
     for known_username in users.split(','):
         command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"lookupnames {known_username}"]
-        sid_string = run(command, f"Attempting to get SID for user {known_username}", target.legacy)
+        sid_string = run(command, f"Attempting to get SID for user {known_username}", target.samba_config)
 
         if "NT_STATUS_ACCESS_DENIED" or "NT_STATUS_NONE_MAPPED" in sid_string:
             continue
@@ -985,7 +1003,7 @@ def enum_sids(users, target, creds):
 
     # Try to get SID list via lsaenumsid
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", "lsaenumsid", target.host]
-    sids_string = run(command, "Attempting to get SIDs via 'lsaenumsid'", target.legacy)
+    sids_string = run(command, "Attempting to get SIDs via 'lsaenumsid'", target.samba_config)
 
     if "NT_STATUS_ACCESS_DENIED" not in sids_string:
         for pattern in sid_patterns_list:
@@ -1031,7 +1049,7 @@ def rid_cycle(sid, rid_ranges, target, creds):
 
         for rid in range(start_rid, end_rid+1):
             command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"lookupsids {sid}-{rid}"]
-            output = run(command, "RID Cycling", target.legacy)
+            output = run(command, "RID Cycling", target.samba_config)
 
             # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
             match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", output)
@@ -1063,7 +1081,7 @@ def enum_printers(target, creds):
     Tries to enum printer via rpcclient's enumprinters.
     '''
     command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", "enumprinters", target.host]
-    printer_info = run(command, "Attempting to get printer info", target.legacy)
+    printer_info = run(command, "Attempting to get printer info", target.samba_config)
     printers = {}
 
     if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
@@ -1239,14 +1257,14 @@ def policy_to_human(low, high, lockout=False):
         time += f"{minutes} minute"
     return time
 
-def run(command, description="", legacy=False):
+def run(command, description="", samba_config=None):
     '''
     Runs a samba client command (net, nmblookup, smbclient or rpcclient) and does some basic output filtering.
     The legacy parameter allows to run a command in legacy mode. In this case a config file is passed to the
     corresponding samba client command. This file will enforce SMBv1.
     '''
-    if legacy:
-        command += ["-s", "config/smbv1.conf"]
+    if samba_config:
+        command += ["-s", f"{samba_config.get_path()}"]
 
     if global_verbose and description:
         print_verbose(f"{description}, running command: {' '.join(shlex.quote(x) for x in command)}")
@@ -1312,7 +1330,11 @@ def run_module_session_check(target, creds):
         print_success(legacy_session.retmsg)
         if legacy_session.retval:
             print_info("Switching to legacy mode for further enumeration")
-        target.legacy = legacy_session.retval
+            try:
+                samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
+                target.samba_config = samba_config
+            except:
+                output = process_error("Switching to legacy mode failed.", ["legacy_session"], module_name, output)
 
     # Check null session
     print_info("Check for null session")
@@ -2014,6 +2036,10 @@ def main():
 
     elapsed_time = datetime.now() - start_time
     print(f"\nCompleted after {elapsed_time.total_seconds():.2f} seconds")
+
+    # Delete temporary samba config
+    if target.samba_config is not None:
+        del target.samba_config
 
 if __name__ == "__main__":
     main()
