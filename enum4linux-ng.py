@@ -1260,8 +1260,8 @@ def policy_to_human(low, high, lockout=False):
 def run(command, description="", samba_config=None):
     '''
     Runs a samba client command (net, nmblookup, smbclient or rpcclient) and does some basic output filtering.
-    The legacy parameter allows to run a command in legacy mode. In this case a config file is passed to the
-    corresponding samba client command. This file will enforce SMBv1.
+    The samba_config parameter allows to pass in a custom samba config, this allows to modify the behaviour of
+    the samba client commands during run (e.g. enforce legacy SMBv1).
     '''
     if samba_config:
         command += ["-s", f"{samba_config.get_path()}"]
