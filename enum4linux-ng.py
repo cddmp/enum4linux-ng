@@ -455,7 +455,7 @@ class EnumSessions():
         if user_session.retval:
             output["random_user_session_possible"] = True
             print_success(user_session.retmsg)
-            print_success(f"Re-running enumeration with user '{creds.random_user}' might give more results.")
+            print_success(f"Re-running enumeration with user '{self.creds.random_user}' might give more results.")
         else:
             output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
 
