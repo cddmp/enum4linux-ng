@@ -1,7 +1,12 @@
-# enum4linux-ng
-![Python 3.6](https://img.shields.io/badge/python-3_6-blue.svg)
-![Python 3.7](https://img.shields.io/badge/python-3_7-blue.svg)
-![Python 3.8](https://img.shields.io/badge/python-3_8-blue.svg)
+<h1 align="center">enum4linux-ng</h1>
+<p align="center">
+<strong>A next generation version of enum4linux</strong>
+</p>
+<p align="center">
+<img src="https://img.shields.io/badge/python-3_6-blue.svg"/>
+<img src="https://img.shields.io/badge/python-3_7-blue.svg"/>
+<img src="https://img.shields.io/badge/python-3_8-blue.svg"/
+</p>
 
 enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs now CiscoCXSecurityLabs) enum4linux.pl, a tool for enumerating information from Windows and Samba systems, aimed for security professionals and CTF player. The tool is mainly a wrapper around the Samba tools `nmblookup`, `net`, `rpcclient` and `smbclient`.
 
