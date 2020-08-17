@@ -407,7 +407,7 @@ class EnumSessions():
         Run session check module which tests for user and null sessions.
         '''
         module_name = "enum_sessions"
-        print_heading(f"Session check on {self.target.host}")
+        print_heading(f"SMB/RPC session checks on {self.target.host}")
         output = {"sessions_possible":False,
                   "legacy_session":False,
                   "null_session_possible":False,
@@ -547,7 +547,7 @@ class EnumLdapDomainInfo():
         the LDAP RootDSE.
         '''
         module_name = "enum_ldap_domain_info"
-        print_heading(f"Information via LDAP for {self.target.host}")
+        print_heading(f"Domain Information via LDAP for {self.target.host}")
         output = {"is_parent_dc":None,
                   "is_child_dc":None,
                   "long_domain":None}
@@ -658,7 +658,7 @@ class EnumLsaqueryDomainInfo():
         the domain/workgroup name, domain SID and the membership type.
         '''
         module_name = "enum_lsaquery_domain_info"
-        print_heading(f"Domain information for {self.target.host}")
+        print_heading(f"Domain information via RPC for {self.target.host}")
         output = {"workgroup":None,
                   "domain_sid":None,
                   "member_of":None}
@@ -766,7 +766,7 @@ class EnumOsInfo():
         Run module srvinfo which collects various OS information.
         '''
         module_name = "enum_os_info"
-        print_heading(f"OS information on {self.target.host}")
+        print_heading(f"OS information via RPC on {self.target.host}")
         output = {"os_info":None}
 
         srvinfo = self.srvinfo()
@@ -845,7 +845,7 @@ class EnumUsersRpc():
         Run module enum users.
         '''
         module_name = "enum_users_rpc"
-        print_heading(f"Users on {self.target.host}")
+        print_heading(f"Users via RPC on {self.target.host}")
         output = {}
 
         print_info("Enumerating users")
@@ -1030,7 +1030,7 @@ class EnumGroupsRpc():
         Run module enum groups.
         '''
         module_name = "enum_groups_rpc"
-        print_heading(f"Groups on {self.target.host}")
+        print_heading(f"Groups via RPC on {self.target.host}")
         output = {}
         groups = None
 
@@ -1387,7 +1387,7 @@ class EnumShares():
         Run module enum shares.
         '''
         module_name = "enum_shares"
-        print_heading(f"Share enumeration on {self.target.host}")
+        print_heading(f"Shares via RPC on {self.target.host}")
         output = {}
         shares = None
 
@@ -1549,7 +1549,7 @@ class EnumPolicy():
         Run module enum policy.
         '''
         module_name = "enum_policy"
-        print_heading(f"Policy information for {self.target.host}")
+        print_heading(f"Policies via RPC for {self.target.host}")
         output = {}
 
         for port in [139, 445]:
@@ -1725,7 +1725,7 @@ class EnumPrinters():
         Run module enum printers.
         '''
         module_name = "enum_printers"
-        print_heading(f"Printer information for {self.target.host}")
+        print_heading(f"Printers via RPC for {self.target.host}")
         output = {}
 
         enum = self.enum()
