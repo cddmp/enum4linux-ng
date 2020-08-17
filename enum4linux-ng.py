@@ -46,11 +46,6 @@
 #         => or it was part of the enumeration but no session could be set up (see above), in this case the
 #            'session_possible' should be 'False'
 #
-### FIXME
-# FIXME: equal output for users, groups and rid_cycling
-# FIXME: services via 'net rpc service list -W bla -U % -I ip'
-# FIXME: Handle NT_STATUS... message in one function
-#
 ### LICENSE
 # This tool may be used for legal purposes only.  Users take full responsibility
 # for any actions performed using this tool. The author accepts no liability
@@ -1772,6 +1767,57 @@ class EnumPrinters():
         return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yaml.dump(printers).rstrip()}")
 
 
+### Services Enumeration
+
+class EnumServices():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
+
+    def run(self):
+        '''
+        Run module enum services.
+        '''
+        module_name = "enum_services"
+        print_heading(f"Services via RPC on {self.target.host}")
+        output = {'services':None}
+
+        enum = self.enum()
+        if enum.retval is None:
+            output = process_error(enum.retmsg, ["services"], module_name, output)
+        else:
+            print_success(enum.retmsg)
+            output['services'] = enum.retval
+
+        return output
+
+    def enum(self):
+        '''
+        Tries to enum services via net rpc serivce list.
+        '''
+        command = ["net", "rpc", "service", "list", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-I", self.target.host]
+        result = run(command, "Attempting to get services", self.target.samba_config)
+        services = {}
+
+        if "WERR_ACCESS_DENIED" in result:
+            return Result(None, "Could not get services via 'net rpc service list': WERR_ACCESS_DENIED")
+        if "NT_STATUS_ACCESS_DENIED" in result:
+            return Result(None, "Could not get services via 'net rpc service list': NT_STATUS_ACCESS_DENIED")
+        if "NT_STATUS_LOGON_FAILURE" in result:
+            return Result(None, "Could not get services via 'net rpc service list': NT_STATUS_LOGON_FAILURE")
+
+        match_list = re.findall(r"([^\s]*)\s*\"(.*)\"", result, re.MULTILINE)
+        if not match_list:
+            return Result(None, "Could not parse result of 'net rpc service list' command, please open a GitHub issue")
+
+        for match in match_list:
+            name = match[0]
+            description = match[1]
+            services[name] = OrderedDict({"description":description})
+
+        return Result(services, f"Found {len(services.keys())} service(s):\n{yaml.dump(services).rstrip()}")
+
+
 ### Misc Functions
 
 def prepare_rid_ranges(rid_ranges):
@@ -1964,6 +2010,7 @@ def check_args(argv):
     parser.add_argument("-G", action="store_true", help="Get groups via RPC")
     parser.add_argument("-Gm", action="store_true", help="Get groups with group members via RPC")
     parser.add_argument("-S", action="store_true", help="Get shares via RPC")
+    parser.add_argument("-C", action="store_true", help="Get services via RPC")
     parser.add_argument("-P", action="store_true", help="Get password policy information via RPC")
     parser.add_argument("-O", action="store_true", help="Get OS information via RPC")
     parser.add_argument("-L", action="store_true", help="Get additional domain info via LDAP/LDAPS (for DCs only)")
@@ -2125,6 +2172,11 @@ def main():
     # Enum groups
     if args.G or args.Gm or args.A or args.As:
         result = EnumGroupsRpc(target, creds, args.Gm, args.d).run()
+        output.update(result)
+
+    # Enum services
+    if args.C:
+        result = EnumServices(target, creds).run()
         output.update(result)
 
     # Enum shares
