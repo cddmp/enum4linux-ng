@@ -47,7 +47,6 @@
 #            'session_possible' should be 'False'
 #
 ### FIXME
-# FIXME: Not sure if the run_something stuff is too crappy,
 # FIXME: equal output for users, groups and rid_cycling
 # FIXME: services via 'net rpc service list -W bla -U % -I ip'
 # FIXME: Handle NT_STATUS... message in one function
@@ -189,23 +188,6 @@ class Result:
         self.retval = retval
         self.retmsg = retmsg
 
-class SambaConfig:
-    def __init__(self, entries):
-        config = '\n'.join(entries)
-        config_file = tempfile.NamedTemporaryFile(delete=False)
-        config_file.write(config.encode())
-        self.config_filename = config_file.name
-        config_file.close()
-
-    def get_path(self):
-        return self.config_filename
-
-    def __del__(self):
-        try:
-            os.remove(self.config_filename)
-        except OSError:
-            pass
-
 class Target:
     '''
     Target encapsulates target information like host name or ip, workgroup name, port number
@@ -240,7 +222,7 @@ class Target:
 
 class Credentials:
     '''
-    Stores username and password.
+    Stores usernames and password.
     '''
     def __init__(self, user, pw):
         # Create an alternative user with pseudo-random username
@@ -250,6 +232,28 @@ class Credentials:
 
     def as_dict(self):
         return {'credentials':OrderedDict({'user':self.user, 'password':self.pw, 'random_user':self.random_user})}
+
+class SambaConfig:
+    '''
+    Allows to create custom Samba configurations which can be passed via path to the various Samba client tools.
+    This is allows to enable non-default features for the Samba tools like SMBv1 which is disabled in recent
+    Samba client tool versions by default.
+    '''
+    def __init__(self, entries):
+        config = '\n'.join(entries)
+        config_file = tempfile.NamedTemporaryFile(delete=False)
+        config_file.write(config.encode())
+        self.config_filename = config_file.name
+        config_file.close()
+
+    def get_path(self):
+        return self.config_filename
+
+    def __del__(self):
+        try:
+            os.remove(self.config_filename)
+        except OSError:
+            pass
 
 class Output:
     '''
@@ -303,6 +307,891 @@ class Output:
     def as_dict(self):
         return self.out_dict
 
+### NetBIOS Enumeration
+
+class EnumNetbios():
+    def __init__(self, target):
+        self.target = target
+
+    def run(self):
+        '''
+        Run NetBIOS module which collects Netbios names and the workgroup.
+        '''
+        module_name = "enum_netbios"
+        print_heading(f"NetBIOS names and Workgroup for {self.target.host}")
+        output = {"workgroup":None, "nmblookup":None}
+
+        nmblookup = self.nmblookup()
+        if nmblookup.retval:
+            result = self.get_workgroup(nmblookup.retval)
+            if result.retval:
+                print_success(result.retmsg)
+                output["workgroup"] = result.retval
+            else:
+                output = process_error(result.retmsg, ["workgroup"], module_name, output)
+
+            result = self.nmblookup_to_human(nmblookup.retval)
+            print_success(result.retmsg)
+            output["nmblookup"] = result.retval
+        else:
+            output = process_error(nmblookup.retmsg, ["nmblookup"], module_name, output)
+
+        return output
+
+    def nmblookup(self):
+        '''
+        Runs nmblookup (a NetBIOS over TCP/IP Client) in order to lookup NetBIOS names information.
+        '''
+        command = ["nmblookup", "-A", self.target.host]
+        nmblookup_result = run(command, "Trying to get NetBIOS names information")
+
+        if "No reply from" in nmblookup_result:
+            return Result(None, "Could not get NetBIOS names information via 'nmblookup': host does not reply")
+        return Result(nmblookup_result, "")
+
+    def get_workgroup(self, nmblookup_result):
+        '''
+        Extract workgroup from given nmblookoup result.
+        '''
+        match = re.search(r"^\s+(\S+)\s+<00>\s+-\s+<GROUP>\s+", nmblookup_result, re.MULTILINE)
+        if match:
+            if valid_workgroup(match.group(1)):
+                workgroup = match.group(1)
+            else:
+                return Result(None, f"Workgroup {workgroup} contains some illegal characters")
+        else:
+            return Result(None, "Could not find workgroup/domain")
+        return Result(workgroup, f"Got domain/workgroup name: {workgroup}")
+
+    def nmblookup_to_human(self, nmblookup_result):
+        '''
+        Map nmblookup output to human readable strings.
+        '''
+        output = []
+        nmblookup_result = nmblookup_result.splitlines()
+        for line in nmblookup_result:
+            if "Looking up status of" in line or line == "":
+                continue
+
+            line = line.replace("\t", "")
+            match = re.match(r"^(\S+)\s+<(..)>\s+-\s+?(<GROUP>)?\s+?[A-Z]", line)
+            if match:
+                line_val = match.group(1)
+                line_code = match.group(2).upper()
+                line_group = False if match.group(3) else True
+                for entry in CONST_NBT_INFO:
+                    pattern, code, group, desc = entry
+                    if pattern:
+                        if pattern in line_val and line_code == code and line_group == group:
+                            output.append(line + " " + desc)
+                            break
+                    else:
+                        if line_code == code and line_group == group:
+                            output.append(line + " " + desc)
+                            break
+            else:
+                output.append(line)
+        return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
+
+
+### Session Checks
+
+class EnumSessions():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
+
+    def run(self):
+        '''
+        Run session check module which tests for user and null sessions.
+        '''
+        module_name = "enum_sessions"
+        print_heading(f"Session check on {self.target.host}")
+        output = {"sessions_possible":False,
+                  "legacy_session":False,
+                  "null_session_possible":False,
+                  "user_session_possible":False,
+                  "random_user_session_possible":False}
+
+        # Check for legacy session
+        print_info("Check for legacy session (SMBv1)")
+        legacy_session = self.check_legacy_session()
+        if legacy_session.retval is None:
+            output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
+        else:
+            output["legacy_session"] = legacy_session.retval
+            print_success(legacy_session.retmsg)
+            if legacy_session.retval:
+                print_info("Switching to legacy mode for further enumeration")
+                try:
+                    samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
+                    self.target.samba_config = samba_config
+                except:
+                    output = process_error("Switching to legacy mode failed.", ["legacy_session"], module_name, output)
+
+        # Check null session
+        print_info("Check for null session")
+        null_session = self.check_user_session(Credentials('', ''))
+        if null_session.retval:
+            output["null_session_possible"] = True
+            print_success(null_session.retmsg)
+        else:
+            output = process_error(null_session.retmsg, ["null_session_possible"], module_name, output)
+
+        # Check user session
+        if self.creds.user:
+            print_info("Check for user session")
+            user_session = self.check_user_session(self.creds)
+            if user_session.retval:
+                output["user_session_possible"] = True
+                print_success(user_session.retmsg)
+            else:
+                output = process_error(user_session.retmsg, ["user_session_possible"], module_name, output)
+
+        # Check random user session
+        print_info("Check for random user session")
+        user_session = self.check_user_session(self.creds, random_user_session=True)
+        if user_session.retval:
+            output["random_user_session_possible"] = True
+            print_success(user_session.retmsg)
+            print_success(f"Re-running enumeration with user '{creds.random_user}' might give more results.")
+        else:
+            output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
+
+        if output["null_session_possible"] or output["user_session_possible"] or output["random_user_session_possible"]:
+            output["sessions_possible"] = True
+        else:
+            process_error("Sessions failed, neither null nor user sessions were possible.", ["sessions_possible", "null_session_possible", "user_session_possible", "random_user_session_possible"], module_name, output)
+
+        return output
+
+    def check_legacy_session(self):
+        '''
+        Current implementations of the samba client tools will enforce at least SMBv2 by default. This will give false
+        negatives during session checks, if the target only supports SMBv1. Therefore, we try to find out here whether
+        the target system only speaks SMBv1.
+        '''
+
+        try:
+            smb = smbconnection.SMBConnection(self.target.host, self.target.host)
+            dialect = smb.getDialect()
+            smb.close()
+            if dialect == smbconnection.SMB_DIALECT:
+                return Result(True, "Server supports only SMBv1")
+            return Result(False, "Server supports dialects higher SMBv1")
+        except Exception as e:
+            if len(e.args) == 2 and isinstance(e.args[1], ConnectionRefusedError):
+                if e.args[1].errno == 111:
+                    error = "Connection refused"
+                return Result(None, f"SMB connection error: {error}")
+            else:
+                return Result(None, f"SMB connection error")
+
+    def check_user_session(self, creds, random_user_session=False):
+        '''
+        Tests access to the IPC$ share.
+
+        General explanation:
+        The Common Internet File System(CIFS/Server Message Block (SMB) protocol specifies
+        mechanisms for interprocess communication over the network. This is called a named pipe.
+        In order to be able to "talk" to these named pipes, a special share named "IPC$" is provided.
+        SMB clients can access named pipes by using this share. Older Windows versions supported
+        anonymous access to this share (empty username and password), which is called a "null sessions".
+        This is a security vulnerability since it allows to gain valuable information about the host
+        system.
+
+        How the test works:
+        In order to test for a null session, the smbclient command is used, by tring to connect to the
+        IPC$ share. If that works, smbclient's 'help' command will be run. If the login was successfull,
+        the help command will return a list of possible commands. One of these commands is called
+        'case_senstive'. We search for this command as an indicator that the IPC session was setup correctly.
+        '''
+
+        if random_user_session:
+            user = creds.random_user
+            pw = ''
+            session_type = "random user"
+        elif not creds.user and not creds.pw:
+            user = ''
+            pw = ''
+            session_type = "null"
+        else:
+            user = creds.user
+            pw = creds.pw
+            session_type = "user"
+
+        command = ['smbclient', '-W', self.target.workgroup, f'//{self.target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
+        session_output = run(command, "Attempting to make session", self.target.samba_config)
+
+        match = re.search(r"do_connect:.*failed\s\(Error\s([^)]+)\)", session_output)
+        if match:
+            error_code = match.group(1)
+            return Result(None, f"Server connection failed for {session_type} session: {error_code}")
+
+        if "case_sensitive" in session_output:
+            return Result(True, f"Server allows session using username '{user}', password '{pw}'")
+        return Result(False, f"Server doesn't allow session using username '{user}', password '{pw}'")
+
+
+### Domain Information Enumeration via LDAP
+
+class EnumLdapDomainInfo():
+    def __init__(self, target):
+        self.target = target
+
+    def run(self):
+        '''
+        Run ldapsearch module which tries to find out whether host is a parent or
+        child DC. Also tries to fetch long domain name. The information are get from
+        the LDAP RootDSE.
+        '''
+        module_name = "enum_ldap_domain_info"
+        print_heading(f"Information via LDAP for {self.target.host}")
+        output = {"is_parent_dc":None,
+                  "is_child_dc":None,
+                  "long_domain":None}
+
+        for with_tls in [False, True]:
+            if with_tls:
+                print_info(f'Trying LDAPS (timeout: {self.target.timeout}s)')
+            else:
+                print_info(f'Trying LDAP (timeout: {self.target.timeout}s)')
+            self.target.tls = with_tls
+            namingcontexts = self.get_namingcontexts()
+            if namingcontexts.retval is not None:
+                break
+            output = process_error(namingcontexts.retmsg, ["is_parent_dc", "is_child_dc", "long_domain"], module_name, output)
+
+        if namingcontexts.retval:
+            # Parent/root or child DC?
+            result = self.check_parent_dc(namingcontexts.retval)
+            if result.retval:
+                output["is_parent_dc"] = True
+                output["is_child_dc"] = False
+            else:
+                output["is_parent_dc"] = True
+                output["is_child_dc"] = False
+            print_success(result.retmsg)
+
+            # Try to get long domain from ldapsearch result
+            result = self.get_long_domain(namingcontexts.retval)
+            if result.retval:
+                print_success(result.retmsg)
+                output["long_domain"] = result.retval
+            else:
+                output = process_error(result.retmsg, ["long_domain"], module_name, output)
+
+        return output
+
+    def get_namingcontexts(self):
+        '''
+        Tries to connect to LDAP/LDAPS. If successful, it tries to get the naming contexts from
+        the so called Root Directory Server Agent Service Entry (RootDSE).
+        '''
+        try:
+            server = Server(self.target.host, use_ssl=self.target.tls, get_info=DSA, connect_timeout=self.target.timeout)
+            ldap_con = Connection(server, auto_bind=True)
+            ldap_con.unbind()
+        except Exception as e:
+            if len(e.args) == 1:
+                error = str(e.args[0])
+            else:
+                error = str(e.args[1][0][0])
+            if "]" in error:
+                error = error.split(']', 1)[1]
+            elif ":" in error:
+                error = error.split(':', 1)[1]
+            error = error.lstrip().rstrip()
+            if self.target.tls:
+                return Result(None, f"LDAPS connect error: {error}")
+            return Result(None, f"LDAP connect error: {error}")
+
+        try:
+            if not server.info.naming_contexts:
+                return Result([], "NamingContexts are not readable")
+        except Exception as e:
+            return Result([], "NamingContexts are not readable")
+
+        return Result(server.info.naming_contexts, "")
+
+    def get_long_domain(self, namingcontexts_result):
+        '''
+        Tries to extract the long domain from the naming contexts.
+        '''
+        long_domain = ""
+
+        for entry in namingcontexts_result:
+            match = re.search("(DC=[^,]+,DC=[^,]+)$", entry)
+            if match:
+                long_domain = match.group(1)
+                long_domain = long_domain.replace("DC=", "")
+                long_domain = long_domain.replace(",", ".")
+                break
+        if long_domain:
+            return Result(long_domain, f"Long domain name is: {long_domain}")
+        return Result(None, "Could not find long domain")
+
+    def check_parent_dc(self, namingcontexts_result):
+        '''
+        Checks whether the target is a parent or child domain controller.
+        This is done by searching for specific naming contexts.
+        '''
+        parent = False
+        if "DC=DomainDnsZones" or "ForestDnsZones" in namingcontexts_result:
+            parent = True
+        if parent:
+            return Result(True, "Appears to be root/parent DC")
+        return Result(False, "Appears to be child DC")
+
+
+### Domain Information Enumeration via lsaquery
+
+class EnumLsaqueryDomainInfo():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
+
+    def run(self):
+        '''
+        Run module lsaquery which tries to get domain information like
+        the domain/workgroup name, domain SID and the membership type.
+        '''
+        module_name = "enum_lsaquery_domain_info"
+        print_heading(f"Domain information for {self.target.host}")
+        output = {"workgroup":None,
+                  "domain_sid":None,
+                  "member_of":None}
+
+        lsaquery = self.lsaquery()
+        if lsaquery.retval is not None:
+            # Try to get domain/workgroup from lsaquery
+            result = self.get_workgroup(lsaquery.retval)
+            if result.retval:
+                print_success(result.retmsg)
+                output["workgroup"] = result.retval
+            else:
+                output = process_error(result.retmsg, ["workgroup"], module_name, output)
+
+            # Try to get domain SID
+            result = self.get_domain_sid(lsaquery.retval)
+            if result.retval:
+                print_success(result.retmsg)
+                output["domain_sid"] = result.retval
+            else:
+                output = process_error(result.retmsg, ["domain_sid"], module_name, output)
+
+            # Is the host part of a domain or a workgroup?
+            result = self.check_is_part_of_workgroup_or_domain(lsaquery.retval)
+            if result.retval:
+                print_success(result.retmsg)
+                output["member_of"] = result.retval
+            else:
+                output = process_error(result.retmsg, ["member_of"], module_name, output)
+        else:
+            output = process_error(lsaquery.retmsg, ["workgroup", "domain_sid", "member_of"], module_name, output)
+
+        return output
+
+    def lsaquery(self):
+        '''
+        Uses the rpcclient command to connect to the named pipe LSARPC (Local Security Authority Remote Procedure Call),
+        which allows to do remote management of domain security policies. In this specific case, we use rpcclient's lsaquery
+        command. This command will do an LSA_QueryInfoPolicy request to get the domain name and the domain service identifier
+        (SID).
+        '''
+        command = ['rpcclient', '-W', self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', self.target.host, '-c', 'lsaquery']
+        lsaquery_result = run(command, "Attempting to get domain SID", self.target.samba_config)
+
+        if "NT_STATUS_LOGON_FAILURE" in lsaquery_result:
+            return Result(None, "Could not get domain information via 'lsaquery': NT_STATUS_LOGON_FAILURE")
+        if "NT_STATUS_ACCESS_DENIED" in lsaquery_result:
+            return Result(None, "Could not get domain information via 'lsaquery': NT_STATUS_ACCESS_DENIED")
+
+        if lsaquery_result:
+            return Result(lsaquery_result, "")
+        return Result(None, "Could not get information via 'lsaquery'")
+
+    def get_workgroup(self, lsaquery_result):
+        '''
+        Takes the result of rpclient's lsaquery command and tries to extract the workgroup.
+        '''
+        workgroup = ""
+        if "Domain Name" in lsaquery_result:
+            match = re.search("Domain Name: (.*)", lsaquery_result)
+            if match:
+                #FIXME: Validate domain? --> See valid_workgroup()
+                workgroup = match.group(1)
+
+        if workgroup:
+            return Result(workgroup, f"Domain: {workgroup}")
+        return Result(None, "Could not get workgroup from lsaquery")
+
+    def get_domain_sid(self, lsaquery_result):
+        '''
+        Takes the result of rpclient's lsaquery command and tries to extract the domain SID.
+        '''
+        domain_sid = ""
+        if "Domain Sid: (NULL SID)" in lsaquery_result:
+            domain_sid = "NULL SID"
+        else:
+            match = re.search(r"Domain Sid: (S-\d+-\d+-\d+-\d+-\d+-\d+)", lsaquery_result)
+            if match:
+                domain_sid = match.group(1)
+        if domain_sid:
+            return Result(domain_sid, f"SID: {domain_sid}")
+        return Result(None, "Could not get domain SID from lsaquery")
+
+    def check_is_part_of_workgroup_or_domain(self, lsaquery_result):
+        '''
+        Takes the result of rpclient's lsaquery command and tries to determine from the result whether the host
+        is part of a domain or workgroup.
+        '''
+        if "Domain Sid: S-0-0" or "Domain Sid: (NULL SID)" in lsaquery_result:
+            return Result("workgroup", "Host is part of a workgroup (not a domain)")
+        if re.search(r"Domain Sid: S-\d+-\d+-\d+-\d+-\d+-\d+", lsaquery_result):
+            return Result("domain", "Host is part of a domain (not a workgroup)")
+        return Result(False, "Could not determine if host is part of domain or part of a workgroup")
+
+
+### OS Information Enumeration
+
+class EnumOsInfo():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
+
+    def run(self):
+        '''
+        Run module srvinfo which collects various OS information.
+        '''
+        module_name = "enum_os_info"
+        print_heading(f"OS information on {self.target.host}")
+        output = {"os_info":None}
+
+        srvinfo = self.srvinfo()
+        if srvinfo.retval:
+            osinfo = self.get_os_info(srvinfo.retval)
+            if osinfo.retval:
+                print_success(osinfo.retmsg)
+                output["os_info"] = osinfo.retval
+            else:
+                output = process_error(osinfo.retmsg, ["os_info"], module_name, output)
+        else:
+            output = process_error(srvinfo.retmsg, ["os_info"], module_name, output)
+
+        return output
+
+    def srvinfo(self):
+        '''
+        Uses rpcclient's srvinfo command to connect to the named pipe SRVSVC in order to call
+        NetSrvGetInfo() on the target. This will return OS information (OS version, platform id,
+        server type).
+        '''
+
+        command = ["rpcclient", "-W", self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', '-c', 'srvinfo', self.target.host]
+        srvinfo_result = run(command, "Attempting to get OS info with command", self.target.samba_config)
+
+        if "NT_STATUS_ACCESS_DENIED" in srvinfo_result:
+            return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_ACCESS_DENIED")
+        if "NT_STATUS_LOGON_FAILURE" in srvinfo_result:
+            return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_LOGON_FAILURE")
+        if "NT_STATUS_IO_TIMEOUT" in srvinfo_result:
+            return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_IO_TIMEOUT")
+        return Result(srvinfo_result, "")
+
+    # FIXME: Evaluate server_type_string
+    def get_os_info(self, srvinfo_result):
+        '''
+        Takes the result of rpcclient's srvinfo command and tries to extract information like
+        platform_id, os version and server type.
+        '''
+        search_pattern_list = ["platform_id", "os version", "server type"]
+
+        os_info = {}
+        first = True
+        for line in srvinfo_result.splitlines():
+            if first:
+                match = re.search(r"\s+[^\s]+\s+(.*)", line)
+                if match:
+                    os_info['server_type_string'] = match.group(1)
+                first = False
+            for search_pattern in search_pattern_list:
+                match = re.search(fr"\s+{search_pattern}\s+:\s+(.*)", line)
+                if match:
+                    # os version => os_version, server type => server_type
+                    search_pattern = search_pattern.replace(" ", "_")
+                    os_info[search_pattern] = match.group(1)
+        if not os_info:
+            return Result(None, "Could not get OS information")
+
+        retmsg = "The following OS information were found:\n"
+        for key, value in os_info.items():
+            retmsg += (f"{key:18} = {value}\n")
+        retmsg = retmsg.rstrip()
+        return Result(os_info, retmsg)
+
+
+### Users Enumeration via RPC
+
+class EnumUsersRpc():
+    def __init__(self, target, creds, detailed):
+        self.target = target
+        self.creds = creds
+        self.detailed = detailed
+
+    def run(self):
+        '''
+        Run module enum users.
+        '''
+        module_name = "enum_users_rpc"
+        print_heading(f"Users on {self.target.host}")
+        output = {}
+
+        print_info("Enumerating users")
+        # Get user via querydispinfo
+        users_qdi = self.enum_from_querydispinfo()
+        if users_qdi.retval is None:
+            output = process_error(users_qdi.retmsg, ["users"], module_name, output)
+            users_qdi_output = None
+        else:
+            print_success(users_qdi.retmsg)
+            users_qdi_output = users_qdi.retval
+
+        # Get user via enumdomusers
+        users_edu = self.enum_from_enumdomusers()
+        if users_edu.retval is None:
+            output = process_error(users_edu.retmsg, ["users"], module_name, output)
+            users_edu_output = None
+        else:
+            print_success(users_edu.retmsg)
+            users_edu_output = users_edu.retval
+
+        # Merge both users dicts
+        if users_qdi_output is not None and users_edu_output is not None:
+            users = {**users_edu_output, **users_qdi_output}
+        elif users_edu_output is None:
+            users = users_qdi_output
+        else:
+            users = users_edu_output
+
+        if users:
+            if self.detailed:
+                print_info("Enumerating users details")
+                for rid in users.keys():
+                    name = users[rid]['username']
+                    user_details = self.get_details_from_rid(rid, name)
+                    if user_details.retval:
+                        print_success(user_details.retmsg)
+                        users[rid]["details"] = user_details.retval
+                    else:
+                        output = process_error(user_details.retmsg, ["users"], module_name, output)
+                        users[rid]["details"] = ""
+
+            print_success(f"After merging user results we have {len(users.keys())} users total:\n{yaml.dump(users).rstrip()}")
+
+        output["users"] = users
+        return output
+
+    def querydispinfo(self):
+        '''
+        querydispinfo uses the Security Account Manager Remote Protocol (SAMR) named pipe to run the QueryDisplayInfo() request.
+        This request will return users with their corresponding Relative ID (RID) as well as multiple account information like a
+        description of the account.
+        '''
+        command = ['rpcclient', '-W', self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', '-c', 'querydispinfo', self.target.host]
+        querydispinfo_result = run(command, "Attempting to get userlist", self.target.samba_config)
+
+        if "NT_STATUS_ACCESS_DENIED" in querydispinfo_result:
+            return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_ACCESS_DENIED")
+        if "NT_STATUS_INVALID_PARAMETER" in querydispinfo_result:
+            return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_INVALID_PARAMETER")
+        if "NT_STATUS_LOGON_FAILURE" in querydispinfo_result:
+            return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_LOGON_FAILURE")
+        return Result(querydispinfo_result, "")
+
+    def enumdomusers(self):
+        '''
+        enomdomusers command will again use the SAMR named pipe to run the EnumDomainUsers() request. This will again
+        return a list of users with their corresponding RID (see querydispinfo()). This is possible since by default
+        the registry key HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Lsa\\RestrictAnonymous = 0. If this is set to
+        1 enumeration is no longer possible.
+        '''
+        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "enumdomusers", self.target.host]
+        enumdomusers_result = run(command, "Attempting to get userlist", self.target.samba_config)
+
+        if "NT_STATUS_ACCESS_DENIED" in enumdomusers_result:
+            return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_ACCESS_DENIED")
+        if "NT_STATUS_INVALID_PARAMETER" in enumdomusers_result:
+            return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_INVALID_PARAMETER")
+        if "NT_STATUS_LOGON_FAILURE" in enumdomusers_result:
+            return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_LOGON_FAILURE")
+        return Result(enumdomusers_result, "")
+
+    def enum_from_querydispinfo(self):
+        '''
+        Takes the result of rpclient's querydispinfo and tries to extract the users from it.
+        '''
+        users = {}
+        querydispinfo = self.querydispinfo()
+
+        if querydispinfo.retval is None:
+            return querydispinfo
+
+        # Example output of rpcclient's querydispinfo:
+        # index: 0x2 RID: 0x3e9 acb: 0x00000010 Account: tester	Name: 	Desc:
+        for line in querydispinfo.retval.splitlines():
+            match = re.search(r"index:\s+.*\s+RID:\s+(0x[A-F-a-f0-9]+)\s+acb:\s+(.*)\s+Account:\s+(.*)\s+Name:\s+(.*)\s+Desc:\s+(.*)", line)
+            if match:
+                rid = match.group(1)
+                rid = str(int(rid, 16))
+                acb = match.group(2)
+                username = match.group(3)
+                name = match.group(4)
+                description = match.group(5)
+                users[rid] = OrderedDict({"username":username, "name":name, "acb":acb, "description":description})
+            else:
+                return Result(None, "Could not extract users from querydispinfo output, please open a GitHub issue")
+        return Result(users, f"Found {len(users.keys())} users via 'querydispinfo'")
+
+    def enum_from_enumdomusers(self):
+        '''
+        Takes the result of rpclient's enumdomusers and tries to extract the users from it.
+        '''
+        users = {}
+        enumdomusers = self.enumdomusers()
+
+        if enumdomusers.retval is None:
+            return enumdomusers
+
+        # Example output of rpcclient's enumdomusers:
+        # user:[tester] rid:[0x3e9]
+        for line in enumdomusers.retval.splitlines():
+            match = re.search(r"user:\[(.*)\]\srid:\[(0x[A-F-a-f0-9]+)\]", line)
+            if match:
+                username = match.group(1)
+                rid = match.group(2)
+                rid = str(int(rid, 16))
+                users[rid] = {"username":username}
+            else:
+                return Result(None, "Could not extract users from eumdomusers output, please open a GitHub issue")
+        return Result(users, f"Found {len(users.keys())} users via 'enumdomusers'")
+
+    def get_details_from_rid(self, rid, name):
+        '''
+        Takes an RID and makes use of the SAMR named pipe to call QueryUserInfo() on the given RID.
+        The output contains lots of information about the corresponding user account.
+        '''
+        if not valid_rid(rid):
+            return Result(None, f"Invalid rid passed: {rid}")
+
+        details = OrderedDict()
+        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"queryuser {rid}", self.target.host]
+        output = run(command, "Attempting to get detailed user info", self.target.samba_config)
+
+        match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", output, re.DOTALL)
+        if match:
+            user_info = match.group(1)
+            user_info = user_info.replace("\t", "")
+
+            for line in user_info.splitlines():
+                if ':' in line:
+                    (key, value) = line.split(":", 1)
+                    key = key.rstrip()
+                    # Skip user and full name, we have this information already
+                    if "User Name" in key or "Full Name" in key:
+                        continue
+                    details[key] = value
+                else:
+                    details[line] = ""
+
+            if "acb_info" in details and valid_hex(details["acb_info"]):
+                for key in CONST_ACB_DICT.keys():
+                    if int(details["acb_info"], 16) & key:
+                        details[CONST_ACB_DICT[key]] = True
+                    else:
+                        details[CONST_ACB_DICT[key]] = False
+
+            return Result(details, f"Found details for user '{name}' (RID {rid})")
+        return Result(None, f"Could not find details for user '{name}' (RID {rid})")
+
+
+### Groups Enumeration via RPC
+
+class EnumGroupsRpc():
+    def __init__(self, target, creds, with_members, detailed):
+        self.target = target
+        self.creds = creds
+        self.with_members = with_members
+        self.detailed = detailed
+
+    def run(self):
+        '''
+        Run module enum groups.
+        '''
+        module_name = "enum_groups_rpc"
+        print_heading(f"Groups on {self.target.host}")
+        output = {}
+        groups = None
+
+        print_info("Enumerating groups")
+        for grouptype in ["local", "builtin", "domain"]:
+            enum = self.enum(grouptype)
+            if enum.retval is None:
+                output = process_error(enum.retmsg, ["groups"], module_name, output)
+            else:
+                if groups is None:
+                    groups = {}
+                print_success(enum.retmsg)
+                groups.update(enum.retval)
+
+        #FIXME: Adjust users enum stuff above so that it looks similar to this one?
+        if groups:
+            if self.with_members:
+                print_info("Enumerating group members")
+                for rid in groups.keys():
+                    # Get group members
+                    groupname = groups[rid]['groupname']
+                    grouptype = groups[rid]['type']
+                    group_members = self.get_members_from_name(groupname, grouptype, rid)
+                    if group_members.retval or group_members.retval == '':
+                        print_success(group_members.retmsg)
+                        groups[rid]["members"] = group_members.retval
+                    else:
+                        groups[rid]["members"] = ""
+                        output = process_error(group_members.retmsg, ["groups"], module_name, output)
+
+            if self.detailed:
+                print_info("Enumerating group details")
+                for rid in groups.keys():
+                    groupname = groups[rid]["groupname"]
+                    grouptype = groups[rid]["type"]
+                    details = self.get_details_from_rid(rid, groupname, grouptype)
+
+                    if details.retval:
+                        print_success(details.retmsg)
+                    else:
+                        output = process_error(details.retmsg, ["groups"], module_name, output)
+                    groups[rid]["details"] = details.retval
+
+            print_success(f"After merging groups results we have {len(groups.keys())} groups total:\n{yaml.dump(groups).rstrip()}")
+        output["groups"] = groups
+        return output
+
+    def enum(self, grouptype):
+        '''
+        Tries to enumerate all groups by calling rpcclient's 'enumalsgroups builtin', 'enumalsgroups domain' as well
+        as 'enumdomgroups'.
+        '''
+        grouptype_dict = {
+            "builtin":"enumalsgroups builtin",
+            "local":"enumalsgroups domain",
+            "domain": "enumdomgroups"
+        }
+
+        if grouptype not in ["builtin", "domain", "local"]:
+            return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
+
+        groups = {}
+        enum = self.enum_by_grouptype(grouptype)
+
+        if enum.retval is None:
+            return enum
+
+        if not enum.retval:
+            return Result({}, f"Found 0 group(s) via '{grouptype_dict[grouptype]}'")
+
+        match = re.search("(group:.*)", enum.retval, re.DOTALL)
+        if not match:
+            return Result(None, f"Could not parse result of {grouptype_dict[grouptype]} command, please open a GitHub issue")
+
+        # Example output of rpcclient's group commands:
+        # group:[RAS and IAS Servers] rid:[0x229]
+        for line in enum.retval.splitlines():
+            match = re.search(r"group:\[(.*)\]\srid:\[(0x[A-F-a-f0-9]+)\]", line)
+            if match:
+                groupname = match.group(1)
+                rid = match.group(2)
+                rid = str(int(rid, 16))
+                groups[rid] = OrderedDict({"groupname":groupname, "type":grouptype})
+            else:
+                return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output, please open a GitHub issue")
+        return Result(groups, f"Found {len(groups.keys())} groups via '{grouptype_dict[grouptype]}'")
+
+    def enum_by_grouptype(self, grouptype):
+        '''
+        Tries to fetch groups via rpcclient's enumalsgroups (so called alias groups) and enumdomgroups.
+        Grouptype "builtin", "local" and "domain" are supported.
+        '''
+        grouptype_dict = {
+            "builtin":"enumalsgroups builtin",
+            "local":"enumalsgroups domain",
+            "domain": "enumdomgroups"
+        }
+
+        if grouptype not in ["builtin", "domain", "local"]:
+            return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
+
+        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"{grouptype_dict[grouptype]}", self.target.host]
+        groups_string = run(command, f"Attempting to get {grouptype} groups", self.target.samba_config)
+
+        if "NT_STATUS_ACCESS_DENIED" in groups_string:
+            return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': NT_STATUS_ACCESS_DENIED")
+        if "NT_STATUS_LOGON_FAILURE" in groups_string:
+            return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': NT_STATUS_LOGON_FAILURE")
+        return Result(groups_string, "")
+
+    def get_members_from_name(self, groupname, grouptype, rid):
+        '''
+        Takes a group name as first argument and tries to enumerate the group members. This is don by using
+        the 'net rpc group members' command.
+        '''
+        command = ["net", "rpc", "group", "members", groupname, "-W", self.target.workgroup, "-I", self.target.host, "-U", f"{self.creds.user}%{self.creds.pw}"]
+        members_string = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
+
+        members = []
+        for member in members_string.splitlines():
+            if "Couldn't lookup SIDs" in member:
+                return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}) due to insufficient user permissions, try a different user")
+            members.append(member)
+
+        return Result(','.join(members), f"Found {len(members)} member(s) for {grouptype} group '{groupname}' (RID {rid})")
+
+    def get_details_from_rid(self, rid, groupname, grouptype):
+        '''
+        Takes an RID and makes use of the SAMR named pipe to open the group with OpenGroup() on the given RID.
+        '''
+        if not valid_rid(rid):
+            return Result(None, f"Invalid rid passed: {rid}")
+
+        details = OrderedDict()
+        command = ["rpcclient", "-W", self.target.workgroup, "-U", f'{self.creds.user}%{self.creds.pw}', "-c", f"querygroup {rid}", self.target.host]
+        output = run(command, "Attempting to get detailed group info", self.target.samba_config)
+
+        #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
+        if "NT_STATUS_NO_SUCH_GROUP" in output:
+            return Result(None, f"Could not get details for {grouptype} group '{groupname}' (RID {rid}): NT_STATUS_NO_SUCH_GROUP")
+
+        match = re.search("([^\n]*Group Name.*Num Members[^\n]*)", output, re.DOTALL)
+        if match:
+            group_info = match.group(1)
+            group_info = group_info.replace("\t", "")
+
+            for line in group_info.splitlines():
+                if ':' in line:
+                    (key, value) = line.split(":", 1)
+                    # Skip group name, we have this information already
+                    if "Group Name" in key:
+                        continue
+                    details[key] = value
+                else:
+                    details[line] = ""
+
+            return Result(details, f"Found details for {grouptype} group '{groupname}' (RID {rid})")
+        return Result(None, f"Could not find details for {grouptype} group '{groupname}' (RID {rid})")
+
+
+### RID Cycling
+
 class RidCycleParams:
     '''
     Stores the various parameters needed for RID cycling. rid_ranges and known_usernames are mandatory.
@@ -327,6 +1216,267 @@ class RidCycleParams:
         else:
             self.enumerated_input["domain_sid"] = ""
 
+class RidCycling():
+    def __init__(self, cycle_params, target, creds, detailed):
+        self.cycle_params = cycle_params
+        self.target = target
+        self.creds = creds
+        self.detailed = detailed
+
+    def run(self):
+        '''
+        Run module RID cycling.
+        '''
+        module_name = "rid_cycling"
+        print_heading(f"Users, Groups and Machines on {self.target.host} via RID cycling")
+        output = self.cycle_params.enumerated_input
+
+        # Try to enumerate SIDs first, if we don't have the domain SID already
+        if output["domain_sid"]:
+            sids_list = [output["domain_sid"]]
+        else:
+            print_info("Trying to enumerate SIDs")
+            sids = self.enum_sids(self.cycle_params.known_usernames)
+            if sids.retval is None:
+                output = process_error(sids.retmsg, ["users", "groups", "machines"], module_name, output)
+                return output
+            print_success(sids.retmsg)
+            sids_list = sids.retval
+
+        # Keep track of what we found...
+        found_count = {"users": 0, "groups": 0, "machines": 0}
+
+        # Run...
+        for sid in sids_list:
+            print_info(f"Trying SID {sid}")
+            rid_cycler = self.rid_cycle(sid, self.cycle_params.rid_ranges)
+            for result in rid_cycler:
+                # We need the top level key to find out whether we got users, groups, machines or the domain_sid...
+                top_level_key = list(result.retval.keys())[0]
+
+                # We found the domain_sid...
+                if top_level_key == 'domain_sid':
+                    output['domain_sid'] = result.retval['domain_sid']
+                    continue
+
+                # ...otherwise "users", "groups" or "machines".
+                # Get the RID of what we found (user, group or machine RID) as well as the corresponding entry (dict).
+                rid = list(result.retval[top_level_key])[0]
+                entry = result.retval[top_level_key][rid]
+
+                # If we have the RID already, we continue...
+                if output[top_level_key] is not None and rid in output[top_level_key]:
+                    continue
+
+                print_success(result.retmsg)
+                found_count[top_level_key] += 1
+
+                # ...else we add the result at the right position.
+                if output[top_level_key] is None:
+                    output[top_level_key] = {}
+                output[top_level_key][rid] = entry
+
+                if self.detailed and ("users" in top_level_key or "groups" in top_level_key):
+                    if "users" in top_level_key:
+                        rid, entry = list(result.retval["users"].items())[0]
+                        name = entry["username"]
+                        details = EnumUsersRpc(self.target, self.creds, False).get_details_from_rid(rid, name)
+                    elif "groups" in top_level_key:
+                        rid, entry = list(result.retval["groups"].items())[0]
+                        groupname = entry["groupname"]
+                        grouptype = entry["type"]
+                        details = EnumGroupsRpc(self.target, self.creds, False, False).get_details_from_rid(rid, groupname, grouptype)
+
+                    if details.retval:
+                        print_success(details.retmsg)
+                    else:
+                        output = process_error(details.retmsg, [top_level_key], module_name, output)
+                    output[top_level_key][rid]["details"] = details.retval
+
+        if found_count["users"] == 0 and found_count["groups"] == 0 and found_count["machines"] == 0:
+            output = process_error("Could not find any (new) users, (new) groups or (new) machines", ["users", "groups", "machines"], module_name, output)
+        else:
+            print_success(f"Found {found_count['users']} user(s), {found_count['groups']} group(s), {found_count['machines']} machine(s) in total")
+
+        return output
+
+    def enum_sids(self, users):
+        '''
+        Tries to enumerate SIDs by looking up user names via rpcclient's lookupnames and by using rpcclient's lsaneumsid.
+        '''
+        sids = []
+        sid_patterns_list = [r"(S-1-5-21-[\d-]+)-\d+", r"(S-1-5-[\d-]+)-\d+", r"(S-1-22-[\d-]+)-\d+"]
+
+        # Try to get a valid SID from well-known user names
+        for known_username in users.split(','):
+            command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"lookupnames {known_username}", self.target.host]
+            sid_string = run(command, f"Attempting to get SID for user {known_username}", self.target.samba_config)
+
+            if "NT_STATUS_ACCESS_DENIED" or "NT_STATUS_NONE_MAPPED" in sid_string:
+                continue
+
+            for pattern in sid_patterns_list:
+                match = re.search(pattern, sid_string)
+                if match:
+                    result = match.group(1)
+                    if result not in sids:
+                        sids.append(result)
+
+        # Try to get SID list via lsaenumsid
+        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "lsaenumsid", self.target.host]
+        sids_string = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config)
+
+        if "NT_STATUS_ACCESS_DENIED" not in sids_string:
+            for pattern in sid_patterns_list:
+                match_list = re.findall(pattern, sids_string)
+                for result in match_list:
+                    if result not in sids:
+                        sids.append(result)
+
+        if sids:
+            return Result(sids, f"Found {len(sids)} SIDs")
+        return Result(None, "Could not get any SIDs")
+
+    def rid_cycle(self, sid, rid_ranges):
+        '''
+        Takes a SID as first parameter well as list of RID ranges (as tuples) as second parameter and does RID cycling.
+        '''
+        for rid_range in rid_ranges:
+            (start_rid, end_rid) = rid_range
+
+            for rid in range(start_rid, end_rid+1):
+                command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", self.target.host, "-c", f"lookupsids {sid}-{rid}"]
+                output = run(command, "RID Cycling", self.target.samba_config)
+
+                # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
+                match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", output)
+                if match:
+                    sid_and_user = match.group(1)
+                    entry = match.group(2)
+
+                    # Samba servers sometimes claim to have user accounts
+                    # with the same name as the UID/RID. We don't report these.
+                    if re.search(r"-(\d+) .*\\\1 \(", sid_and_user):
+                        continue
+
+                    # "(1)" = User, "(2)" = Domain Group,"(3)" = Domain SID,"(4)" = Local Group
+                    # "(5)" = Well-known group, "(6)" = Deleted account, "(7)" = Invalid account
+                    # "(8)" = Unknown, "(9)" = Machine/Computer account
+                    if "(1)" in sid_and_user:
+                        yield Result({"users":{str(rid):{"username":entry}}}, f"Found user '{entry}' (RID {rid})")
+                    elif "(2)" in sid_and_user:
+                        yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group '{entry}' (RID {rid})")
+                    elif "(3)" in sid_and_user:
+                        yield Result({"domain_sid":f"{sid}-{rid}"}, f"Found domain SID {sid}-{rid}")
+                    elif "(4)" in sid_and_user:
+                        yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group '{entry}' (RID {rid})")
+                    elif "(9)" in sid_and_user:
+                        yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
+
+
+### Shares Enumeration
+
+class EnumShares():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
+
+    def run(self):
+        '''
+        Run module enum shares.
+        '''
+        module_name = "enum_shares"
+        print_heading(f"Share enumeration on {self.target.host}")
+        output = {}
+        shares = None
+
+        enum = self.enum()
+        if enum.retval is None:
+            output = process_error(enum.retmsg, ["shares"], module_name, output)
+        else:
+            # This will print success even if no shares were found (which is not an error.)
+            print_success(enum.retmsg)
+            shares = enum.retval
+            # Check access if there are any shares.
+            if enum.retmsg:
+                for share in shares.keys():
+                    print_info(f"Testing share {share}")
+                    access = self.check_access(share)
+                    if access.retval is None:
+                        output = process_error(access.retmsg, ["shares"], module_name, output)
+                        continue
+                    print_success(access.retmsg)
+                    shares[share] = access.retval
+
+        output["shares"] = shares
+        return output
+
+    def enum(self):
+        '''
+        Tries to enumerate shares with the given username and password. It does this running the smbclient command.
+        smbclient will open a connection to the Server Service Remote Protocol named pipe (srvsvc). Once connected
+        it calls the NetShareEnumAll() to get a list of shares.
+        '''
+        command = ["smbclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-L", f"//{self.target.host}"]
+        shares_result = run(command, "Attempting to get share list using authentication", self.target.samba_config)
+
+        if "NT_STATUS_ACCESS_DENIED" in shares_result:
+            return Result(None, "Could not list shares: NT_STATUS_ACCESS_DENIED")
+
+        if "NT_STATUS_LOGON_FAILURE" in shares_result:
+            return Result(None, "Could not list shares: NT_STATUS_LOGON_FAILURE")
+
+        shares = {}
+        match_list = re.findall(r"\n\s*([ \S]+?)\s+(?:Disk|IPC|Printer)", shares_result, re.IGNORECASE)
+        if match_list:
+            for share in match_list:
+                shares[share] = {}
+
+        if shares:
+            return Result(shares, f"Found {len(shares.keys())} share(s): {','.join(shares.keys())}")
+        return Result(shares, f"Found 0 share(s) for user '{creds.user}' with password '{creds.pw}', try a different user")
+
+    def check_access(self, share):
+        '''
+        Takes a share as first argument and checks whether the share is accessible.
+        The function returns a dictionary with the keys "mapping" and "listing".
+        "mapping" can be either OK or DENIED. OK means the share exists and is accessible.
+        "listing" can bei either OK, DENIED, N/A or NOT SUPPORTED. N/A means directory listing
+        is not allowed, while NOT SUPPORTED means the share does not support listing at all.
+        This is the case for shares like IPC$ which is used for remote procedure calls.
+
+        In order to enumerate access permissions, smbclient is used with the "dir" command.
+        In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
+        '''
+        command = ["smbclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", f"//{self.target.host}/{share}", "-c", "dir"]
+        output = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config)
+
+        if "NT_STATUS_BAD_NETWORK_NAME" in output:
+            return Result(None, "Share doesn't exist")
+
+        if "NT_STATUS_ACCESS_DENIED listing" in output:
+            return Result({"mapping":"ok", "listing":"denied"}, "Mapping: OK, Listing: DENIED")
+
+        if "tree connect failed: NT_STATUS_ACCESS_DENIED" in output:
+            return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
+
+        if "NT_STATUS_INVALID_INFO_CLASS" in output or "NT_STATUS_NETWORK_ACCESS_DENIED" in output:
+            return Result({"mapping":"ok", "listing":"not supported"}, "Mapping: OK, Listing: NOT SUPPORTED")
+
+        if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in output:
+            return Result(None, "Could not check share: NT_STATUS_OBJECT_NAME_NOT_FOUND")
+
+        if "NT_STATUS_INVALID_PARAMETER" in output:
+            return Result(None, "Could not check share: NT_STATUS_INVALID_PARAMETER")
+
+        if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", output) or re.search(r".*blocks\sof\ssize.*blocks\savailable.*", output):
+            return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
+
+        return Result(None, "Could not parse result of smbclient command, please open a GitHub issue")
+
+
+### Share Brute-Force
+
 class ShareBruteParams:
     '''
     Stores the various parameters needed for Share Bruteforcing. shares_file is mandatory.
@@ -343,678 +1493,285 @@ class ShareBruteParams:
         else:
             self.enumerated_input["shares"] = None
 
-def print_heading(text):
-    output = f"|    {text}    |"
-    length = len(output)
-    print()
-    print(" " + "="*(length-2))
-    print(output)
-    print(" " + "="*(length-2))
+class BruteForceShares():
+    def __init__(self, brute_params, target, creds):
+        self.brute_params = brute_params
+        self.target = target
+        self.creds = creds
 
-def print_success(msg):
-    print(f"{Colors.green}[+] {msg + Colors.reset}")
+    def run(self):
+        '''
+        Run module bruteforce shares.
+        '''
+        module_name = "brute_force_shares"
+        print_heading(f"Share bruteforcing on {self.target.host}")
+        output = self.brute_params.enumerated_input
 
-def print_error(msg):
-    print(f"{Colors.red}[-] {msg + Colors.reset}")
+        found_count = 0
+        try:
+            with open(self.brute_params.shares_file) as f:
+                for share in f:
+                    share = share.rstrip()
 
-def print_info(msg):
-    print(f"{Colors.blue}[*] {msg + Colors.reset}")
+                    # Skip all shares we might have found by the enum_shares module already
+                    if output["shares"] is not None and share in output["shares"].keys():
+                        continue
 
-def print_verbose(msg):
-    print(f"[V] {msg}")
+                    result = EnumShares(self.target, self.creds).check_access(share)
+                    if result.retval:
+                        if output["shares"] is None:
+                            output["shares"] = {}
+                        print_success(f"Found share: {share}")
+                        print_success(result.retmsg)
+                        output["shares"][share] = result.retval
+                        found_count += 1
+        except:
+            output = process_error(f"Failed to open {brute_params.shares_file}", ["shares"], module_name, output)
 
-def process_error(msg, affected_entries, module_name, output_dict):
-    '''
-    Helper function to print error and update output dictionary at the same time.
-    '''
-    print_error(msg)
-
-    if not "errors" in output_dict:
-        output_dict["errors"] = {}
-
-    for entry in affected_entries:
-        if not entry in output_dict["errors"]:
-            output_dict["errors"].update({entry: {}})
-
-        if not module_name in output_dict["errors"][entry]:
-            output_dict["errors"][entry].update({module_name: []})
-
-        output_dict["errors"][entry][module_name].append(msg)
-    return output_dict
-
-def abort(code, msg):
-    '''
-    This function is used to abort() the tool run on error. It will take a status code
-    as well as an error message. The error message will be printed out, the status code will
-    be used as exit code.
-    '''
-    print_error(msg)
-    sys.exit(code)
-
-def run_nmblookup(host):
-    '''
-    Runs nmblookup (a NetBIOS over TCP/IP Client) in order to lookup NetBIOS names information.
-    '''
-    command = ["nmblookup", "-A", host]
-    nmblookup_result = run(command, "Trying to get NetBIOS names information")
-
-    if "No reply from" in nmblookup_result:
-        return Result(None, "Could not get NetBIOS names information via 'nmblookup': host does not reply")
-    return Result(nmblookup_result, "")
-
-def get_workgroup_from_nmblookup(nmblookup_result):
-    '''
-    Extract workgroup from given nmblookoup result.
-    '''
-    match = re.search(r"^\s+(\S+)\s+<00>\s+-\s+<GROUP>\s+", nmblookup_result, re.MULTILINE)
-    if match:
-        if valid_workgroup(match.group(1)):
-            workgroup = match.group(1)
+        if found_count == 0:
+            output = process_error("Could not find any (new) shares", ["shares"], module_name, output)
         else:
-            return Result(None, f"Workgroup {workgroup} contains some illegal characters")
-    else:
-        return Result(None, "Could not find workgroup/domain")
-    return Result(workgroup, f"Got domain/workgroup name: {workgroup}")
+            print_success(f"Found {found_count} (new) share(s) in total")
 
-def nmblookup_to_human(nmblookup_result):
-    '''
-    Map nmblookup output to human readable strings.
-    '''
-    output = []
-    nmblookup_result = nmblookup_result.splitlines()
-    for line in nmblookup_result:
-        if "Looking up status of" in line or line == "":
-            continue
+        return output
 
-        line = line.replace("\t", "")
-        match = re.match(r"^(\S+)\s+<(..)>\s+-\s+?(<GROUP>)?\s+?[A-Z]", line)
-        if match:
-            line_val = match.group(1)
-            line_code = match.group(2).upper()
-            line_group = False if match.group(3) else True
-            for entry in CONST_NBT_INFO:
-                pattern, code, group, desc = entry
-                if pattern:
-                    if pattern in line_val and line_code == code and line_group == group:
-                        output.append(line + " " + desc)
-                        break
-                else:
-                    if line_code == code and line_group == group:
-                        output.append(line + " " + desc)
-                        break
-        else:
-            output.append(line)
-    return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
 
-def check_legacy_session(target):
-    '''
-    Current implementations of the samba client tools will enforce at least SMBv2 by default. This will give false
-    negatives during session checks, if the target only supports SMBv1. Therefore, we try to find out here whether
-    the target system only speaks SMBv1.
-    '''
+### Policy Enumeration
 
-    try:
-        smb = smbconnection.SMBConnection(target.host, target.host)
-        dialect = smb.getDialect()
-        smb.close()
-        if dialect == smbconnection.SMB_DIALECT:
-            return Result(True, "Server supports only SMBv1")
-        return Result(False, "Server supports dialects higher SMBv1")
-    except Exception as e:
-        if len(e.args) == 2 and isinstance(e.args[1], ConnectionRefusedError):
-            if e.args[1].errno == 111:
-                error = "Connection refused"
-            return Result(None, f"SMB connection error: {error}")
-        else:
-            return Result(None, f"SMB connection error")
+class EnumPolicy():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
 
-def check_session(target, creds, random_user_session=False):
-    '''
-    Tests access to the IPC$ share.
+    def run(self):
+        '''
+        Run module enum policy.
+        '''
+        module_name = "enum_policy"
+        print_heading(f"Policy information for {self.target.host}")
+        output = {}
 
-    General explanation:
-    The Common Internet File System(CIFS/Server Message Block (SMB) protocol specifies
-    mechanisms for interprocess communication over the network. This is called a named pipe.
-    In order to be able to "talk" to these named pipes, a special share named "IPC$" is provided.
-    SMB clients can access named pipes by using this share. Older Windows versions supported
-    anonymous access to this share (empty username and password), which is called a "null sessions".
-    This is a security vulnerability since it allows to gain valuable information about the host
-    system.
-
-    How the test works:
-    In order to test for a null session, the smbclient command is used, by tring to connect to the
-    IPC$ share. If that works, smbclient's 'help' command will be run. If the login was successfull,
-    the help command will return a list of possible commands. One of these commands is called
-    'case_senstive'. We search for this command as an indicator that the IPC session was setup correctly.
-    '''
-
-    if random_user_session:
-        user = creds.random_user
-        pw = ''
-        session_type = "random user"
-    elif not creds.user and not creds.pw:
-        user = ''
-        pw = ''
-        session_type = "null"
-    else:
-        user = creds.user
-        pw = creds.pw
-        session_type = "user"
-
-    command = ['smbclient', '-W', target.workgroup, f'//{target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
-    session_output = run(command, "Attempting to make session", target.samba_config)
-
-    match = re.search(r"do_connect:.*failed\s\(Error\s([^)]+)\)", session_output)
-    if match:
-        error_code = match.group(1)
-        return Result(None, f"Server connection failed for {session_type} session: {error_code}")
-
-    if "case_sensitive" in session_output:
-        return Result(True, f"Server allows session using username '{user}', password '{pw}'")
-    return Result(False, f"Server doesn't allow session using username '{user}', password '{pw}'")
-
-def get_namingcontexts(target):
-    '''
-    Tries to connect to LDAP/LDAPS. If successful, it tries to get the naming contexts from
-    the so called Root Directory Server Agent Service Entry (RootDSE).
-    '''
-    try:
-        server = Server(target.host, use_ssl=target.tls, get_info=DSA, connect_timeout=target.timeout)
-        ldap_con = Connection(server, auto_bind=True)
-        ldap_con.unbind()
-    except Exception as e:
-        if len(e.args) == 1:
-            error = str(e.args[0])
-        else:
-            error = str(e.args[1][0][0])
-        if "]" in error:
-            error = error.split(']', 1)[1]
-        elif ":" in error:
-            error = error.split(':', 1)[1]
-        error = error.lstrip().rstrip()
-        if target.tls:
-            return Result(None, f"LDAPS connect error: {error}")
-        return Result(None, f"LDAP connect error: {error}")
-
-    try:
-        if not server.info.naming_contexts:
-            return Result([], "NamingContexts are not readable")
-    except Exception as e:
-        return Result([], "NamingContexts are not readable")
-
-    return Result(server.info.naming_contexts, "")
-
-def check_parent_dc(namingcontexts_result):
-    '''
-    Checks whether the target is a parent or child domain controller.
-    This is done by searching for specific naming contexts.
-    '''
-    parent = False
-    if "DC=DomainDnsZones" or "ForestDnsZones" in namingcontexts_result:
-        parent = True
-    if parent:
-        return Result(True, "Appears to be root/parent DC")
-    return Result(False, "Appears to be child DC")
-
-def get_long_domain(namingcontexts_result):
-    '''
-    Tries to extract the long domain from the naming contexts.
-    '''
-    long_domain = ""
-
-    for entry in namingcontexts_result:
-        match = re.search("(DC=[^,]+,DC=[^,]+)$", entry)
-        if match:
-            long_domain = match.group(1)
-            long_domain = long_domain.replace("DC=", "")
-            long_domain = long_domain.replace(",", ".")
-            break
-    if long_domain:
-        return Result(long_domain, f"Long domain name is: {long_domain}")
-    return Result(None, "Could not find long domain")
-
-def run_lsaquery(target, creds):
-    '''
-    Uses the rpcclient command to connect to the named pipe LSARPC (Local Security Authority Remote Procedure Call),
-    which allows to do remote management of domain security policies. In this specific case, we use rpcclient's lsaquery
-    command. This command will do an LSA_QueryInfoPolicy request to get the domain name and the domain service identifier
-    (SID).
-    '''
-    command = ['rpcclient', '-W', target.workgroup, '-U', f'{creds.user}%{creds.pw}', target.host, '-c', 'lsaquery']
-    lsaquery_result = run(command, "Attempting to get domain SID", target.samba_config)
-
-    if "NT_STATUS_LOGON_FAILURE" in lsaquery_result:
-        return Result(None, "Could not get domain information via 'lsaquery': NT_STATUS_LOGON_FAILURE")
-    if "NT_STATUS_ACCESS_DENIED" in lsaquery_result:
-        return Result(None, "Could not get domain information via 'lsaquery': NT_STATUS_ACCESS_DENIED")
-
-    if lsaquery_result:
-        return Result(lsaquery_result, "")
-    return Result(None, "Could not get information via 'lsaquery'")
-
-def check_is_part_of_workgroup_or_domain(lsaquery_result):
-    '''
-    Takes the result of rpclient's lsaquery command and tries to determine from the result whether the host
-    is part of a domain or workgroup.
-    '''
-    if "Domain Sid: S-0-0" or "Domain Sid: (NULL SID)" in lsaquery_result:
-        return Result("workgroup", "Host is part of a workgroup (not a domain)")
-    if re.search(r"Domain Sid: S-\d+-\d+-\d+-\d+-\d+-\d+", lsaquery_result):
-        return Result("domain", "Host is part of a domain (not a workgroup)")
-    return Result(False, "Could not determine if host is part of domain or part of a workgroup")
-
-def get_workgroup_from_lsaquery(lsaquery_result):
-    '''
-    Takes the result of rpclient's lsaquery command and tries to extract the workgroup.
-    '''
-    workgroup = ""
-    if "Domain Name" in lsaquery_result:
-        match = re.search("Domain Name: (.*)", lsaquery_result)
-        if match:
-            #FIXME: Validate domain? --> See valid_workgroup()
-            workgroup = match.group(1)
-
-    if workgroup:
-        return Result(workgroup, f"Domain: {workgroup}")
-    return Result(None, "Could not get workgroup from lsaquery")
-
-def get_domain_sid_from_lsaquery(lsaquery_result):
-    '''
-    Takes the result of rpclient's lsaquery command and tries to extract the domain SID.
-    '''
-    domain_sid = ""
-    if "Domain Sid: (NULL SID)" in lsaquery_result:
-        domain_sid = "NULL SID"
-    else:
-        match = re.search(r"Domain Sid: (S-\d+-\d+-\d+-\d+-\d+-\d+)", lsaquery_result)
-        if match:
-            domain_sid = match.group(1)
-    if domain_sid:
-        return Result(domain_sid, f"SID: {domain_sid}")
-    return Result(None, "Could not get domain SID from lsaquery")
-
-def run_srvinfo(target, creds):
-    '''
-    Uses rpcclient's srvinfo command to connect to the named pipe SRVSVC in order to call
-    NetSrvGetInfo() on the target. This will return OS information (OS version, platform id,
-    server type).
-    '''
-
-    command = ["rpcclient", "-W", target.workgroup, '-U', f'{creds.user}%{creds.pw}', '-c', 'srvinfo', target.host]
-    srvinfo_result = run(command, "Attempting to get OS info with command", target.samba_config)
-
-    if "NT_STATUS_ACCESS_DENIED" in srvinfo_result:
-        return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_ACCESS_DENIED")
-    if "NT_STATUS_LOGON_FAILURE" in srvinfo_result:
-        return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_LOGON_FAILURE")
-    if "NT_STATUS_IO_TIMEOUT" in srvinfo_result:
-        return Result(None, "Could not get OS info via 'srvinfo': NT_STATUS_IO_TIMEOUT")
-    return Result(srvinfo_result, "")
-
-# FIXME: Evaluate server_type_string
-def get_os_info(srvinfo_result):
-    '''
-    Takes the result of rpcclient's srvinfo command and tries to extract information like
-    platform_id, os version and server type.
-    '''
-    search_pattern_list = ["platform_id", "os version", "server type"]
-
-    os_info = {}
-    first = True
-    for line in srvinfo_result.splitlines():
-        if first:
-            match = re.search(r"\s+[^\s]+\s+(.*)", line)
-            if match:
-                os_info['server_type_string'] = match.group(1)
-            first = False
-        for search_pattern in search_pattern_list:
-            match = re.search(fr"\s+{search_pattern}\s+:\s+(.*)", line)
-            if match:
-                # os version => os_version, server type => server_type
-                search_pattern = search_pattern.replace(" ", "_")
-                os_info[search_pattern] = match.group(1)
-    if not os_info:
-        return Result(None, "Could not get OS information")
-
-    retmsg = "The following OS information were found:\n"
-    for key, value in os_info.items():
-        retmsg += (f"{key:18} = {value}\n")
-    retmsg = retmsg.rstrip()
-    return Result(os_info, retmsg)
-
-def run_querydispinfo(target, creds):
-    '''
-    querydispinfo uses the Security Account Manager Remote Protocol (SAMR) named pipe to run the QueryDisplayInfo() request.
-    This request will return users with their corresponding Relative ID (RID) as well as multiple account information like a
-    description of the account.
-    '''
-    command = ['rpcclient', '-W', target.workgroup, '-c', 'querydispinfo', '-U', f'{creds.user}%{creds.pw}', target.host]
-    querydispinfo_result = run(command, "Attempting to get userlist", target.samba_config)
-
-    if "NT_STATUS_ACCESS_DENIED" in querydispinfo_result:
-        return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_ACCESS_DENIED")
-    if "NT_STATUS_INVALID_PARAMETER" in querydispinfo_result:
-        return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_INVALID_PARAMETER")
-    if "NT_STATUS_LOGON_FAILURE" in querydispinfo_result:
-        return Result(None, "Could not find users via 'querydispinfo': NT_STATUS_LOGON_FAILURE")
-    return Result(querydispinfo_result, "")
-
-def run_enumdomusers(target, creds):
-    '''
-    enomdomusers command will again use the SAMR named pipe to run the EnumDomainUsers() request. This will again
-    return a list of users with their corresponding RID (see run_querydispinfo()). This is possible since by default
-    the registry key HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Lsa\\RestrictAnonymous = 0. If this is set to
-    1 enumeration is no longer possible.
-    '''
-    command = ["rpcclient", "-W", target.workgroup, "-c", "enumdomusers", "-U", f"{creds.user}%{creds.pw}", target.host]
-    enumdomusers_result = run(command, "Attempting to get userlist", target.samba_config)
-
-    if "NT_STATUS_ACCESS_DENIED" in enumdomusers_result:
-        return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_ACCESS_DENIED")
-    if "NT_STATUS_INVALID_PARAMETER" in enumdomusers_result:
-        return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_INVALID_PARAMETER")
-    if "NT_STATUS_LOGON_FAILURE" in enumdomusers_result:
-        return Result(None, "Could not find users via 'enumdomusers': NT_STATUS_LOGON_FAILURE")
-    return Result(enumdomusers_result, "")
-
-def enum_users_from_querydispinfo(target, creds):
-    '''
-    Takes the result of rpclient's querydispinfo and tries to extract the users from it.
-    '''
-    users = {}
-    querydispinfo = run_querydispinfo(target, creds)
-
-    if querydispinfo.retval is None:
-        return querydispinfo
-
-    # Example output of rpcclient's querydispinfo:
-    # index: 0x2 RID: 0x3e9 acb: 0x00000010 Account: tester	Name: 	Desc:
-    for line in querydispinfo.retval.splitlines():
-        match = re.search(r"index:\s+.*\s+RID:\s+(0x[A-F-a-f0-9]+)\s+acb:\s+(.*)\s+Account:\s+(.*)\s+Name:\s+(.*)\s+Desc:\s+(.*)", line)
-        if match:
-            rid = match.group(1)
-            rid = str(int(rid, 16))
-            acb = match.group(2)
-            username = match.group(3)
-            name = match.group(4)
-            description = match.group(5)
-            users[rid] = OrderedDict({"username":username, "name":name, "acb":acb, "description":description})
-        else:
-            return Result(None, "Could not extract users from querydispinfo output, please open a GitHub issue")
-    return Result(users, f"Found {len(users.keys())} users via 'querydispinfo'")
-
-def enum_users_from_enumdomusers(target, creds):
-    '''
-    Takes the result of rpclient's enumdomusers and tries to extract the users from it.
-    '''
-    users = {}
-    enumdomusers = run_enumdomusers(target, creds)
-
-    if enumdomusers.retval is None:
-        return enumdomusers
-
-    # Example output of rpcclient's enumdomusers:
-    # user:[tester] rid:[0x3e9]
-    for line in enumdomusers.retval.splitlines():
-        match = re.search(r"user:\[(.*)\]\srid:\[(0x[A-F-a-f0-9]+)\]", line)
-        if match:
-            username = match.group(1)
-            rid = match.group(2)
-            rid = str(int(rid, 16))
-            users[rid] = {"username":username}
-        else:
-            return Result(None, "Could not extract users from eumdomusers output, please open a GitHub issue")
-    return Result(users, f"Found {len(users.keys())} users via 'enumdomusers'")
-
-def get_user_details_from_rid(rid, name, target, creds):
-    '''
-    Takes an RID and makes use of the SAMR named pipe to call QueryUserInfo() on the given RID.
-    The output contains lots of information about the corresponding user account.
-    '''
-    if not valid_rid(rid):
-        return Result(None, f"Invalid rid passed: {rid}")
-
-    details = OrderedDict()
-    command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", f"queryuser {rid}", target.host]
-    output = run(command, "Attempting to get detailed user info", target.samba_config)
-
-    match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", output, re.DOTALL)
-    if match:
-        user_info = match.group(1)
-        user_info = user_info.replace("\t", "")
-
-        for line in user_info.splitlines():
-            if ':' in line:
-                (key, value) = line.split(":", 1)
-                key = key.rstrip()
-                # Skip user and full name, we have this information already
-                if "User Name" in key or "Full Name" in key:
-                    continue
-                details[key] = value
+        for port in [139, 445]:
+            print_info(f"Trying port {port}/tcp (timeout: {self.target.timeout}s)")
+            self.target.port = port
+            enum = self.enum()
+            if enum.retval is None:
+                output = process_error(enum.retmsg, ["policy"], module_name, output)
+                output["policy"] = None
             else:
-                details[line] = ""
+                print_success(enum.retmsg)
+                output["policy"] = enum.retval
 
-        if "acb_info" in details and valid_hex(details["acb_info"]):
-            for key in CONST_ACB_DICT.keys():
-                if int(details["acb_info"], 16) & key:
-                    details[CONST_ACB_DICT[key]] = True
-                else:
-                    details[CONST_ACB_DICT[key]] = False
+        return output
 
-        return Result(details, f"Found details for user '{name}' (RID {rid})")
-    return Result(None, f"Could not find details for user '{name}' (RID {rid})")
+    # This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
+    # All credits to Wh1t3Fox!
+    def enum(self):
+        '''
+        Tries to enum password policy and domain lockout and logoff information by opening a connection to the SAMR
+        named pipe and calling SamQueryInformationDomain() as well as SamQueryInformationDomain2().
+        '''
+        policy = {}
 
-def run_enum_groups(grouptype, target, creds):
-    '''
-    Tries to fetch groups via rpcclient's enumalsgroups (so called alias groups) and enumdomgroups.
-    Grouptype "builtin", "local" and "domain" are supported.
-    '''
-    grouptype_dict = {
-        "builtin":"enumalsgroups builtin",
-        "local":"enumalsgroups domain",
-        "domain": "enumdomgroups"
-    }
+        result = self.samr_init()
+        if result.retval[0] is None or result.retval[1] is None:
+            return Result(None, result.retmsg)
 
-    if grouptype not in ["builtin", "domain", "local"]:
-        return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
+        dce, domain_handle = result.retval
 
-    command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"{grouptype_dict[grouptype]}"]
-    groups_string = run(command, f"Attempting to get {grouptype} groups", target.samba_config)
+        # Password policy
+        try:
+            domain_passwd = samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
+            result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_passwd)
+        except:
+            return Result(None, "Could not get domain password policy: RPC SamrQueryInformationDomain2() failed")
 
-    if "NT_STATUS_ACCESS_DENIED" in groups_string:
-        return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': NT_STATUS_ACCESS_DENIED")
-    if "NT_STATUS_LOGON_FAILURE" in groups_string:
-        return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': NT_STATUS_LOGON_FAILURE")
-    return Result(groups_string, "")
-
-def enum_groups(grouptype, target, creds):
-    '''
-    Tries to enumerate all groups by calling rpcclient's 'enumalsgroups builtin', 'enumalsgroups domain' as well
-    as 'enumdomgroups'.
-    '''
-    grouptype_dict = {
-        "builtin":"enumalsgroups builtin",
-        "local":"enumalsgroups domain",
-        "domain": "enumdomgroups"
-    }
-
-    if grouptype not in ["builtin", "domain", "local"]:
-        return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
-
-    groups = {}
-    enum = run_enum_groups(grouptype, target, creds)
-
-    if enum.retval is None:
-        return enum
-
-    if not enum.retval:
-        return Result({}, f"Found 0 group(s) via '{grouptype_dict[grouptype]}'")
-
-    match = re.search("(group:.*)", enum.retval, re.DOTALL)
-    if not match:
-        return Result(None, f"Could not parse result of {grouptype_dict[grouptype]} command, please open a GitHub issue")
-
-    # Example output of rpcclient's group commands:
-    # group:[RAS and IAS Servers] rid:[0x229]
-    for line in enum.retval.splitlines():
-        match = re.search(r"group:\[(.*)\]\srid:\[(0x[A-F-a-f0-9]+)\]", line)
-        if match:
-            groupname = match.group(1)
-            rid = match.group(2)
-            rid = str(int(rid, 16))
-            groups[rid] = OrderedDict({"groupname":groupname, "type":grouptype})
-        else:
-            return Result(None, f"Could not extract groups from {grouptype_dict[grouptype]} output, please open a GitHub issue")
-    return Result(groups, f"Found {len(groups.keys())} groups via '{grouptype_dict[grouptype]}'")
-
-def get_group_members_from_name(groupname, grouptype, rid, target, creds):
-    '''
-    Takes a group name as first argument and tries to enumerate the group members. This is don by using
-    the 'net rpc group members' command.
-    '''
-    command = ["net", "rpc", "group", "members", groupname, "-W", target.workgroup, "-I", target.host, "-U", f"{creds.user}%{creds.pw}"]
-    members_string = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", target.samba_config)
-
-    members = []
-    for member in members_string.splitlines():
-        if "Couldn't lookup SIDs" in member:
-            return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}) due to insufficient user permissions, try a different user")
-        members.append(member)
-
-    return Result(','.join(members), f"Found {len(members)} member(s) for {grouptype} group '{groupname}' (RID {rid})")
-
-def get_group_details_from_rid(rid, groupname, grouptype, target, creds):
-    '''
-    Takes an RID and makes use of the SAMR named pipe to open the group with OpenGroup() on the given RID.
-    '''
-    if not valid_rid(rid):
-        return Result(None, f"Invalid rid passed: {rid}")
-
-    details = OrderedDict()
-    command = ["rpcclient", "-W", target.workgroup, "-U", f'{creds.user}%{creds.pw}', "-c", f"querygroup {rid}", target.host]
-    output = run(command, "Attempting to get detailed group info", target.samba_config)
-
-    #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
-    if "NT_STATUS_NO_SUCH_GROUP" in output:
-        return Result(None, f"Could not get details for {grouptype} group '{groupname}' (RID {rid}): NT_STATUS_NO_SUCH_GROUP")
-
-    match = re.search("([^\n]*Group Name.*Num Members[^\n]*)", output, re.DOTALL)
-    if match:
-        group_info = match.group(1)
-        group_info = group_info.replace("\t", "")
-
-        for line in group_info.splitlines():
-            if ':' in line:
-                (key, value) = line.split(":", 1)
-                # Skip group name, we have this information already
-                if "Group Name" in key:
-                    continue
-                details[key] = value
+        policy["domain_password_information"] = {}
+        policy["domain_password_information"]["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
+        policy["domain_password_information"]["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
+        policy["domain_password_information"]["min_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
+        policy["domain_password_information"]["max_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
+        policy["domain_password_information"]["pw_properties"] = []
+        pw_prop = result['Buffer']['Password']['PasswordProperties']
+        for bitmask in CONST_DOMAIN_FIELDS.keys():
+            if pw_prop & bitmask == bitmask:
+                policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:True})
             else:
-                details[line] = ""
+                policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:False})
 
-        return Result(details, f"Found details for {grouptype} group '{groupname}' (RID {rid})")
-    return Result(None, f"Could not find details for {grouptype} group '{groupname}' (RID {rid})")
+        # Domain lockout
+        try:
+            domain_lockout = samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
+            result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_lockout)
+        except:
+            return Result(None, "Could not get domain lockout policy: RPC SamrQueryInformationDomain2() failed")
 
-def check_share_access(share, target, creds):
-    '''
-    Takes a share as first argument and checks whether the share is accessible.
-    The function returns a dictionary with the keys "mapping" and "listing".
-    "mapping" can be either OK or DENIED. OK means the share exists and is accessible.
-    "listing" can bei either OK, DENIED, N/A or NOT SUPPORTED. N/A means directory listing
-    is not allowed, while NOT SUPPORTED means the share does not support listing at all.
-    This is the case for shares like IPC$ which is used for remote procedure calls.
+        policy["domain_lockout_information"] = {}
+        policy["domain_lockout_information"]["lockout_observation_window"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
+        policy["domain_lockout_information"]["lockout_duration"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
+        policy["domain_lockout_information"]["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
 
-    In order to enumerate access permissions, smbclient is used with the "dir" command.
-    In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
-    '''
-    command = ["smbclient", "-W", target.workgroup, f"//{target.host}/{share}", "-U", f"{creds.user}%{creds.pw}", "-c", "dir"]
-    output = run(command, f"Attempting to map share //{target.host}/{share}", target.samba_config)
+        # Domain logoff
+        try:
+            domain_logoff = samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation
+            result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
+        except:
+            return Result(None, "Could not get domain logoff policy: RPC SamrQueryInformationDomain2() failed")
 
-    if "NT_STATUS_BAD_NETWORK_NAME" in output:
-        return Result(None, "Share doesn't exist")
+        policy["domain_logoff_information"] = {}
+        policy["domain_logoff_information"]["force_logoff_time"] = self.policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
 
-    if "NT_STATUS_ACCESS_DENIED listing" in output:
-        return Result({"mapping":"ok", "listing":"denied"}, "Mapping: OK, Listing: DENIED")
+        return Result(policy, f"Found policy:\n{yaml.dump(policy, sort_keys=False).rstrip()}")
 
-    if "tree connect failed: NT_STATUS_ACCESS_DENIED" in output:
-        return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
+    # This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
+    # All credits to Wh1t3Fox!
+    def samr_init(self):
+        '''
+        Tries to connect to the SAMR named pipe and get the domain handle.
+        '''
+        try:
+            smb = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+            smb.login(self.creds.user, self.creds.pw, self.target.workgroup)
+            rpctransport = transport.SMBTransport(smb_connection=smb, filename=r'\samr', remoteName=self.target.host)
+            dce = DCERPC_v5(rpctransport)
+            dce.connect()
+            dce.bind(samr.MSRPC_UUID_SAMR)
+        except:
+            return Result((None, None), f"DCE/SAMR named pipe connect failed on port {self.target.port}/tcp")
 
-    if "NT_STATUS_INVALID_INFO_CLASS" in output or "NT_STATUS_NETWORK_ACCESS_DENIED" in output:
-        return Result({"mapping":"ok", "listing":"not supported"}, "Mapping: OK, Listing: NOT SUPPORTED")
+        try:
+            resp = samr.hSamrConnect2(dce)
+        except:
+            return Result((None, None), f"SamrConnect2() call failed on port {self.target.port}/tcp")
+        if resp['ErrorCode'] != 0:
+            return Result((None, None), f"SamrConnect2() call failed on port {self.target.port}/tcp")
 
-    if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in output:
-        return Result(None, "Could not check share: NT_STATUS_OBJECT_NAME_NOT_FOUND")
+        resp2 = samr.hSamrEnumerateDomainsInSamServer(dce, serverHandle=resp['ServerHandle'], enumerationContext=0, preferedMaximumLength=500)
+        if resp2['ErrorCode'] != 0:
+            return Result((None, None), "SamrEnumerateDomainsinSamServer failed")
 
-    if "NT_STATUS_INVALID_PARAMETER" in output:
-        return Result(None, "Could not check share: NT_STATUS_INVALID_PARAMETER")
+        resp3 = samr.hSamrLookupDomainInSamServer(dce, serverHandle=resp['ServerHandle'], name=resp2['Buffer']['Buffer'][0]['Name'])
+        if resp3['ErrorCode'] != 0:
+            return Result((None, None), "SamrLookupDomainInSamServer failed")
 
-    if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", output) or re.search(r".*blocks\sof\ssize.*blocks\savailable.*", output):
-        return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
+        resp4 = samr.hSamrOpenDomain(dce, serverHandle=resp['ServerHandle'], desiredAccess=samr.MAXIMUM_ALLOWED, domainId=resp3['DomainId'])
+        if resp4['ErrorCode'] != 0:
+            return Result((None, None), "SamrOpenDomain failed")
 
-    return Result(None, "Could not parse result of smbclient command, please open a GitHub issue")
+        #domains = resp2['Buffer']['Buffer']
+        domain_handle = resp4['DomainHandle']
 
-def enum_shares(target, creds):
-    '''
-    Tries to enumerate shares with the given username and password. It does this running the smbclient command.
-    smbclient will open a connection to the Server Service Remote Protocol named pipe (srvsvc). Once connected
-    it calls the NetShareEnumAll() to get a list of shares.
-    '''
-    command = ["smbclient", "-W", target.workgroup, "-L", f"//{target.host}", "-U", f"{creds.user}%{creds.pw}"]
-    shares_result = run(command, "Attempting to get share list using authentication", target.samba_config)
+        return Result((dce, domain_handle), "")
 
-    if "NT_STATUS_ACCESS_DENIED" in shares_result:
-        return Result(None, "Could not list shares: NT_STATUS_ACCESS_DENIED")
+    # This function was copied (slightly modified) from the polenum.py source code: https://github.com/Wh1t3Fox/polenum
+    # All credits to Wh1t3Fox!
+    def policy_to_human(self, low, high, lockout=False):
+        '''
+        Converts various values retrieved via the SAMR named pipe into human readable strings.
+        '''
+        time = ""
+        tmp = 0
 
-    if "NT_STATUS_LOGON_FAILURE" in shares_result:
-        return Result(None, "Could not list shares: NT_STATUS_LOGON_FAILURE")
+        if low == 0 and hex(high) == "-0x80000000":
+            return "not set"
+        if low == 0 and high == 0:
+            return "none"
 
-    shares = {}
-    match_list = re.findall(r"\n\s*([ \S]+?)\s+(?:Disk|IPC|Printer)", shares_result, re.IGNORECASE)
-    if match_list:
-        for share in match_list:
-            shares[share] = {}
+        if not lockout:
+            if low != 0:
+                high = abs(high+1)
+            else:
+                high = abs(high)
+                low = abs(low)
 
-    if shares:
-        return Result(shares, f"Found {len(shares.keys())} share(s): {','.join(shares.keys())}")
-    return Result(shares, f"Found 0 share(s) for user '{creds.user}' with password '{creds.pw}', try a different user")
+            tmp = low + (high)*16**8  # convert to 64bit int
+            tmp *= (1e-7)  # convert to seconds
+        else:
+            tmp = abs(high) * (1e-7)
 
-def enum_sids(users, target, creds):
-    '''
-    Tries to enumerate SIDs by looking up user names via rpcclient's lookupnames and by using rpcclient's lsaneumsid.
-    '''
-    sids = []
-    sid_patterns_list = [r"(S-1-5-21-[\d-]+)-\d+", r"(S-1-5-[\d-]+)-\d+", r"(S-1-22-[\d-]+)-\d+"]
+        try:
+            minutes = datetime.utcfromtimestamp(tmp).minute
+            hours = datetime.utcfromtimestamp(tmp).hour
+            time_diff = datetime.utcfromtimestamp(tmp) - datetime.utcfromtimestamp(0)
+            days = time_diff.days
+        except:
+            return "invalid time"
 
-    # Try to get a valid SID from well-known user names
-    for known_username in users.split(','):
-        command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"lookupnames {known_username}"]
-        sid_string = run(command, f"Attempting to get SID for user {known_username}", target.samba_config)
+        if days > 1:
+            time += f"{days} days "
+        elif days == 1:
+            time += f"{days} day "
+        if hours > 1:
+            time += f"{hours} hours "
+        elif hours == 1:
+            time += f"{hours} hour "
+        if minutes > 1:
+            time += f"{minutes} minutes"
+        elif minutes == 1:
+            time += f"{minutes} minute"
+        return time
 
-        if "NT_STATUS_ACCESS_DENIED" or "NT_STATUS_NONE_MAPPED" in sid_string:
-            continue
 
-        for pattern in sid_patterns_list:
-            match = re.search(pattern, sid_string)
-            if match:
-                result = match.group(1)
-                if result not in sids:
-                    sids.append(result)
+### Printer Enumeration
 
-    # Try to get SID list via lsaenumsid
-    command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", "lsaenumsid", target.host]
-    sids_string = run(command, "Attempting to get SIDs via 'lsaenumsid'", target.samba_config)
+class EnumPrinters():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
 
-    if "NT_STATUS_ACCESS_DENIED" not in sids_string:
-        for pattern in sid_patterns_list:
-            match_list = re.findall(pattern, sids_string)
-            for result in match_list:
-                if result not in sids:
-                    sids.append(result)
+    def run(self):
+        '''
+        Run module enum printers.
+        '''
+        module_name = "enum_printers"
+        print_heading(f"Printer information for {self.target.host}")
+        output = {}
 
-    if sids:
-        return Result(sids, f"Found {len(sids)} SIDs")
-    return Result(None, "Could not get any SIDs")
+        enum = self.enum()
+        if enum.retval is None:
+            output = process_error(enum.retmsg, ["printers"], module_name, output)
+            output["printers"] = None
+        else:
+            print_success(enum.retmsg)
+            output["printers"] = enum.retval
+        return output
+
+    def enum(self):
+        '''
+        Tries to enum printer via rpcclient's enumprinters.
+        '''
+        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "enumprinters", self.target.host]
+        printer_info = run(command, "Attempting to get printer info", self.target.samba_config)
+        printers = {}
+
+        if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
+            return Result("", "No printer available")
+        if "NT_STATUS_ACCESS_DENIED" in printer_info:
+            return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_ACCESS_DENIED")
+        if "NT_STATUS_LOGON_FAILURE" in printer_info:
+            return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_LOGON_FAILURE")
+        if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
+            return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_HOST_UNREACHABLE")
+        if "No printers returned." in printer_info:
+            return Result({}, "No printers returned (this is not an error).")
+        if not printer_info:
+            return Result({}, "Empty response, there are no printer(s) (this is not an error, there seem to be really none)")
+
+        match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", printer_info, re.MULTILINE)
+        if not match_list:
+            return Result(None, "Could not parse result of enumprinters command, please open a GitHub issue")
+
+        for match in match_list:
+            flags = match[0]
+            name = match[1]
+            description = match[2]
+            comment = match[3]
+            printers[name] = OrderedDict({"description":description, "comment":comment, "flags":flags})
+
+        return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yaml.dump(printers).rstrip()}")
+
+
+### Misc Functions
 
 def prepare_rid_ranges(rid_ranges):
     '''
@@ -1039,223 +1796,6 @@ def prepare_rid_ranges(rid_ranges):
         rid_ranges_list.append((start_rid, end_rid))
 
     return rid_ranges_list
-
-def rid_cycle(sid, rid_ranges, target, creds):
-    '''
-    Takes a SID as first parameter well as list of RID ranges (as tuples) as second parameter and does RID cycling.
-    '''
-    for rid_range in rid_ranges:
-        (start_rid, end_rid) = rid_range
-
-        for rid in range(start_rid, end_rid+1):
-            command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", target.host, "-c", f"lookupsids {sid}-{rid}"]
-            output = run(command, "RID Cycling", target.samba_config)
-
-            # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
-            match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", output)
-            if match:
-                sid_and_user = match.group(1)
-                entry = match.group(2)
-
-	        # Samba servers sometimes claim to have user accounts
-	        # with the same name as the UID/RID. We don't report these.
-                if re.search(r"-(\d+) .*\\\1 \(", sid_and_user):
-                    continue
-
-                # "(1)" = User, "(2)" = Domain Group,"(3)" = Domain SID,"(4)" = Local Group
-                # "(5)" = Well-known group, "(6)" = Deleted account, "(7)" = Invalid account
-                # "(8)" = Unknown, "(9)" = Machine/Computer account
-                if "(1)" in sid_and_user:
-                    yield Result({"users":{str(rid):{"username":entry}}}, f"Found user '{entry}' (RID {rid})")
-                elif "(2)" in sid_and_user:
-                    yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group '{entry}' (RID {rid})")
-                elif "(3)" in sid_and_user:
-                    yield Result({"domain_sid":f"{sid}-{rid}"}, f"Found domain SID {sid}-{rid}")
-                elif "(4)" in sid_and_user:
-                    yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group '{entry}' (RID {rid})")
-                elif "(9)" in sid_and_user:
-                    yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
-
-def enum_printers(target, creds):
-    '''
-    Tries to enum printer via rpcclient's enumprinters.
-    '''
-    command = ["rpcclient", "-W", target.workgroup, "-U", f"{creds.user}%{creds.pw}", "-c", "enumprinters", target.host]
-    printer_info = run(command, "Attempting to get printer info", target.samba_config)
-    printers = {}
-
-    if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in printer_info:
-        return Result("", "No printer available")
-    if "NT_STATUS_ACCESS_DENIED" in printer_info:
-        return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_ACCESS_DENIED")
-    if "NT_STATUS_LOGON_FAILURE" in printer_info:
-        return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_LOGON_FAILURE")
-    if "NT_STATUS_HOST_UNREACHABLE" in printer_info:
-        return Result(None, "Could not get printer info via 'enumprinters': NT_STATUS_HOST_UNREACHABLE")
-    if "No printers returned." in printer_info:
-        return Result({}, "No printers returned (this is not an error).")
-    if not printer_info:
-        return Result({}, "Empty response, there are no printer(s) (this is not an error, there seem to be really none)")
-
-    match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", printer_info, re.MULTILINE)
-    if not match_list:
-        return Result(None, "Could not parse result of enumprinters command, please open a GitHub issue")
-
-    for match in match_list:
-        flags = match[0]
-        name = match[1]
-        description = match[2]
-        comment = match[3]
-        printers[name] = OrderedDict({"description":description, "comment":comment, "flags":flags})
-
-    return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yaml.dump(printers).rstrip()}")
-
-# This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
-# All credits to Wh1t3Fox!
-def samr_init(target, creds):
-    '''
-    Tries to connect to the SAMR named pipe and get the domain handle.
-    '''
-    try:
-        smb = smbconnection.SMBConnection(remoteName=target.host, remoteHost=target.host, sess_port=target.port, timeout=target.timeout)
-        smb.login(creds.user, creds.pw, target.workgroup)
-        rpctransport = transport.SMBTransport(smb_connection=smb, filename=r'\samr', remoteName=target.host)
-        dce = DCERPC_v5(rpctransport)
-        dce.connect()
-        dce.bind(samr.MSRPC_UUID_SAMR)
-    except:
-        return Result((None, None), f"DCE/SAMR named pipe connect failed on port {target.port}/tcp")
-
-    try:
-        resp = samr.hSamrConnect2(dce)
-    except:
-        return Result((None, None), f"SamrConnect2() call failed on port {target.port}/tcp")
-    if resp['ErrorCode'] != 0:
-        return Result((None, None), f"SamrConnect2() call failed on port {target.port}/tcp")
-
-    resp2 = samr.hSamrEnumerateDomainsInSamServer(dce, serverHandle=resp['ServerHandle'], enumerationContext=0, preferedMaximumLength=500)
-    if resp2['ErrorCode'] != 0:
-        return Result((None, None), "SamrEnumerateDomainsinSamServer failed")
-
-    resp3 = samr.hSamrLookupDomainInSamServer(dce, serverHandle=resp['ServerHandle'], name=resp2['Buffer']['Buffer'][0]['Name'])
-    if resp3['ErrorCode'] != 0:
-        return Result((None, None), "SamrLookupDomainInSamServer failed")
-
-    resp4 = samr.hSamrOpenDomain(dce, serverHandle=resp['ServerHandle'], desiredAccess=samr.MAXIMUM_ALLOWED, domainId=resp3['DomainId'])
-    if resp4['ErrorCode'] != 0:
-        return Result((None, None), "SamrOpenDomain failed")
-
-    #domains = resp2['Buffer']['Buffer']
-    domain_handle = resp4['DomainHandle']
-
-    return Result((dce, domain_handle), "")
-
-# This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
-# All credits to Wh1t3Fox!
-def enum_policy(target, creds):
-    '''
-    Tries to enum password policy and domain lockout and logoff information by opening a connection to the SAMR
-    named pipe and calling SamQueryInformationDomain() as well as SamQueryInformationDomain2().
-    '''
-    policy = {}
-
-    result = samr_init(target, creds)
-    if result.retval[0] is None or result.retval[1] is None:
-        return Result(None, result.retmsg)
-
-    dce, domain_handle = result.retval
-
-    # Password policy
-    try:
-        domain_passwd = samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
-        result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_passwd)
-    except:
-        return Result(None, "Could not get domain password policy: RPC SamrQueryInformationDomain2() failed")
-
-    policy["domain_password_information"] = {}
-    policy["domain_password_information"]["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
-    policy["domain_password_information"]["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
-    policy["domain_password_information"]["min_pw_age"] = policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
-    policy["domain_password_information"]["max_pw_age"] = policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
-    policy["domain_password_information"]["pw_properties"] = []
-    pw_prop = result['Buffer']['Password']['PasswordProperties']
-    for bitmask in CONST_DOMAIN_FIELDS.keys():
-        if pw_prop & bitmask == bitmask:
-            policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:True})
-        else:
-            policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:False})
-
-    # Domain lockout
-    try:
-        domain_lockout = samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
-        result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_lockout)
-    except:
-        return Result(None, "Could not get domain lockout policy: RPC SamrQueryInformationDomain2() failed")
-
-    policy["domain_lockout_information"] = {}
-    policy["domain_lockout_information"]["lockout_observation_window"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
-    policy["domain_lockout_information"]["lockout_duration"] = policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
-    policy["domain_lockout_information"]["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
-
-    # Domain logoff
-    try:
-        domain_logoff = samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation
-        result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
-    except:
-        return Result(None, "Could not get domain logoff policy: RPC SamrQueryInformationDomain2() failed")
-
-    policy["domain_logoff_information"] = {}
-    policy["domain_logoff_information"]["force_logoff_time"] = policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
-
-    return Result(policy, f"Found policy:\n{yaml.dump(policy, sort_keys=False).rstrip()}")
-
-# This function was copied (slightly modified) from the polenum.py source code: https://github.com/Wh1t3Fox/polenum
-# All credits to Wh1t3Fox!
-def policy_to_human(low, high, lockout=False):
-    '''
-    Converts various values retrieved via the SAMR named pipe into human readable strings.
-    '''
-    time = ""
-    tmp = 0
-
-    if low == 0 and hex(high) == "-0x80000000":
-        return "not set"
-    if low == 0 and high == 0:
-        return "none"
-
-    if not lockout:
-        if low != 0:
-            high = abs(high+1)
-        else:
-            high = abs(high)
-            low = abs(low)
-
-        tmp = low + (high)*16**8  # convert to 64bit int
-        tmp *= (1e-7)  # convert to seconds
-    else:
-        tmp = abs(high) * (1e-7)
-
-    try:
-        minutes = datetime.utcfromtimestamp(tmp).minute
-        hours = datetime.utcfromtimestamp(tmp).hour
-        time_diff = datetime.utcfromtimestamp(tmp) - datetime.utcfromtimestamp(0)
-        days = time_diff.days
-    except:
-        return "invalid time"
-
-    if days > 1:
-        time += f"{days} days "
-    elif days == 1:
-        time += f"{days} day "
-    if hours > 1:
-        time += f"{hours} hours "
-    elif hours == 1:
-        time += f"{hours} hour "
-    if minutes > 1:
-        time += f"{minutes} minutes"
-    elif minutes == 1:
-        time += f"{minutes} minute"
-    return time
 
 def run(command, description="", samba_config=None):
     '''
@@ -1282,489 +1822,8 @@ def run(command, description="", samba_config=None):
     output = output.rstrip('\n')
     return output
 
-def run_module_netbios(target):
-    '''
-    Run NetBIOS module which collects Netbios names and the workgroup.
-    '''
-    module_name = "module_netbios"
-    print_heading(f"NetBIOS names and Workgroup for {target.host}")
-    output = {"workgroup":None, "nmblookup":None}
 
-    nmblookup = run_nmblookup(target.host)
-    if nmblookup.retval:
-        result = get_workgroup_from_nmblookup(nmblookup.retval)
-        if result.retval:
-            print_success(result.retmsg)
-            output["workgroup"] = result.retval
-        else:
-            output = process_error(result.retmsg, ["workgroup"], module_name, output)
-
-        result = nmblookup_to_human(nmblookup.retval)
-        print_success(result.retmsg)
-        output["nmblookup"] = result.retval
-    else:
-        output = process_error(nmblookup.retmsg, ["nmblookup"], module_name, output)
-
-    return output
-
-def run_module_session_check(target, creds):
-    '''
-    Run session check module which tests for user and null sessions.
-    '''
-    module_name = "module_session_check"
-    print_heading(f"Session check on {target.host}")
-    output = {"sessions_possible":False,
-              "legacy_session":False,
-              "null_session_possible":False,
-              "user_session_possible":False,
-              "random_user_session_possible":False}
-
-
-    # Check for legacy session
-    print_info("Check for legacy session (SMBv1)")
-    legacy_session = check_legacy_session(target)
-    if legacy_session.retval is None:
-        output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
-    else:
-        output["legacy_session"] = legacy_session.retval
-        print_success(legacy_session.retmsg)
-        if legacy_session.retval:
-            print_info("Switching to legacy mode for further enumeration")
-            try:
-                samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
-                target.samba_config = samba_config
-            except:
-                output = process_error("Switching to legacy mode failed.", ["legacy_session"], module_name, output)
-
-    # Check null session
-    print_info("Check for null session")
-    null_session = check_session(target, Credentials('', ''))
-    if null_session.retval:
-        output["null_session_possible"] = True
-        print_success(null_session.retmsg)
-    else:
-        output = process_error(null_session.retmsg, ["null_session_possible"], module_name, output)
-
-    # Check user session
-    if creds.user:
-        print_info("Check for user session")
-        user_session = check_session(target, creds)
-        if user_session.retval:
-            output["user_session_possible"] = True
-            print_success(user_session.retmsg)
-        else:
-            output = process_error(user_session.retmsg, ["user_session_possible"], module_name, output)
-
-    # Check random user session
-    print_info("Check for random user session")
-    user_session = check_session(target, creds, random_user_session=True)
-    if user_session.retval:
-        output["random_user_session_possible"] = True
-        print_success(user_session.retmsg)
-        print_success(f"Re-running enumeration with user '{creds.random_user}' might give more results.")
-    else:
-        output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
-
-    if output["null_session_possible"] or output["user_session_possible"] or output["random_user_session_possible"]:
-        output["sessions_possible"] = True
-    else:
-        output["sessions_possible"] = False
-        process_error("Sessions failed, neither null nor user sessions were possible.", ["sessions_possible", "null_session_possible", "user_session_possible", "random_user_session_possible"], module_name, output)
-
-    return output
-
-def run_module_ldapsearch(target):
-    '''
-    Run ldapsearch module which tries to find out whether host is a parent or
-    child DC. Also tries to fetch long domain name. The information are get from
-    the LDAP RootDSE.
-    '''
-    module_name = "module_ldapsearch"
-    print_heading(f"Information via LDAP for {target.host}")
-    output = {"is_parent_dc":None,
-              "is_child_dc":None,
-              "long_domain":None}
-
-    for with_tls in [False, True]:
-        if with_tls:
-            print_info(f'Trying LDAPS (timeout: {target.timeout}s)')
-        else:
-            print_info(f'Trying LDAP (timeout: {target.timeout}s)')
-        target.tls = with_tls
-        namingcontexts = get_namingcontexts(target)
-        if namingcontexts.retval is not None:
-            break
-        output = process_error(namingcontexts.retmsg, ["is_parent_dc", "is_child_dc", "long_domain"], module_name, output)
-
-    if namingcontexts.retval:
-        # Parent/root or child DC?
-        result = check_parent_dc(namingcontexts.retval)
-        if result.retval:
-            output["is_parent_dc"] = True
-            output["is_child_dc"] = False
-        else:
-            output["is_parent_dc"] = True
-            output["is_child_dc"] = False
-        print_success(result.retmsg)
-
-        # Try to get long domain from ldapsearch result
-        result = get_long_domain(namingcontexts.retval)
-        if result.retval:
-            print_success(result.retmsg)
-            output["long_domain"] = result.retval
-        else:
-            output = process_error(result.retmsg, ["long_domain"], module_name, output)
-
-    return output
-
-def run_module_lsaquery(target, creds):
-    '''
-    Run module lsaquery which tries to get domain information like
-    the domain/workgroup name, domain SID and the membership type.
-    '''
-    module_name = "module_lsaquery"
-    print_heading(f"Domain information for {target.host}")
-    output = {"workgroup":None,
-              "domain_sid":None,
-              "member_of":None}
-
-    lsaquery = run_lsaquery(target, creds)
-    if lsaquery.retval is not None:
-        # Try to get domain/workgroup from lsaquery
-        result = get_workgroup_from_lsaquery(lsaquery.retval)
-        if result.retval:
-            print_success(result.retmsg)
-            output["workgroup"] = result.retval
-        else:
-            output = process_error(result.retmsg, ["workgroup"], module_name, output)
-
-        # Try to get domain SID
-        result = get_domain_sid_from_lsaquery(lsaquery.retval)
-        if result.retval:
-            print_success(result.retmsg)
-            output["domain_sid"] = result.retval
-        else:
-            output = process_error(result.retmsg, ["domain_sid"], module_name, output)
-
-        # Is the host part of a domain or a workgroup?
-        result = check_is_part_of_workgroup_or_domain(lsaquery.retval)
-        if result.retval:
-            print_success(result.retmsg)
-            output["member_of"] = result.retval
-        else:
-            output = process_error(result.retmsg, ["member_of"], module_name, output)
-    else:
-        output = process_error(lsaquery.retmsg, ["workgroup", "domain_sid", "member_of"], module_name, output)
-
-    return output
-
-def run_module_srvinfo(target, creds):
-    '''
-    Run module srvinfo which collects various OS information.
-    '''
-    module_name = "module_srvinfo"
-    print_heading(f"OS information on {target.host}")
-    output = {"os_info":None}
-
-    srvinfo = run_srvinfo(target, creds)
-    if srvinfo.retval:
-        osinfo = get_os_info(srvinfo.retval)
-        if osinfo.retval:
-            print_success(osinfo.retmsg)
-            output["os_info"] = osinfo.retval
-        else:
-            output = process_error(osinfo.retmsg, ["os_info"], module_name, output)
-    else:
-        output = process_error(srvinfo.retmsg, ["os_info"], module_name, output)
-
-    return output
-
-def run_module_enum_users(target, creds, detailed):
-    '''
-    Run module enum users.
-    '''
-    module_name = "module_enum_users"
-    print_heading(f"Users on {target.host}")
-    output = {}
-
-    print_info("Enumerating users")
-    # Get user via querydispinfo
-    users_qdi = enum_users_from_querydispinfo(target, creds)
-    if users_qdi.retval is None:
-        output = process_error(users_qdi.retmsg, ["users"], module_name, output)
-        users_qdi_output = None
-    else:
-        print_success(users_qdi.retmsg)
-        users_qdi_output = users_qdi.retval
-
-    # Get user via enumdomusers
-    users_edu = enum_users_from_enumdomusers(target, creds)
-    if users_edu.retval is None:
-        output = process_error(users_edu.retmsg, ["users"], module_name, output)
-        users_edu_output = None
-    else:
-        print_success(users_edu.retmsg)
-        users_edu_output = users_edu.retval
-
-    # Merge both users dicts
-    if users_qdi_output is not None and users_edu_output is not None:
-        users = {**users_edu_output, **users_qdi_output}
-    elif users_edu_output is None:
-        users = users_qdi_output
-    else:
-        users = users_edu_output
-
-    if users:
-        if detailed:
-            print_info("Enumerating users details")
-            for rid in users.keys():
-                name = users[rid]['username']
-                user_details = get_user_details_from_rid(rid, name, target, creds)
-                if user_details.retval:
-                    print_success(user_details.retmsg)
-                    users[rid]["details"] = user_details.retval
-                else:
-                    output = process_error(user_details.retmsg, ["users"], module_name, output)
-                    users[rid]["details"] = ""
-
-        print_success(f"After merging user results we have {len(users.keys())} users total:\n{yaml.dump(users).rstrip()}")
-
-    output["users"] = users
-    return output
-
-def run_module_enum_groups(target, creds, with_members, detailed):
-    '''
-    Run module enum groups.
-    '''
-    module_name = "module_enum_groups"
-    print_heading(f"Groups on {target.host}")
-    output = {}
-    groups = None
-
-    print_info("Enumerating groups")
-    for grouptype in ["local", "builtin", "domain"]:
-        enum = enum_groups(grouptype, target, creds)
-        if enum.retval is None:
-            output = process_error(enum.retmsg, ["groups"], module_name, output)
-        else:
-            if groups is None:
-                groups = {}
-            print_success(enum.retmsg)
-            groups.update(enum.retval)
-
-    #FIXME: Adjust users enum stuff above so that it looks similar to this one?
-    if groups:
-        if with_members:
-            print_info("Enumerating group members")
-            for rid in groups.keys():
-                # Get group members
-                groupname = groups[rid]['groupname']
-                grouptype = groups[rid]['type']
-                group_members = get_group_members_from_name(groupname, grouptype, rid, target, creds)
-                if group_members.retval or group_members.retval == '':
-                    print_success(group_members.retmsg)
-                    groups[rid]["members"] = group_members.retval
-                else:
-                    groups[rid]["members"] = ""
-                    output = process_error(group_members.retmsg, ["groups"], module_name, output)
-
-        if detailed:
-            print_info("Enumerating group details")
-            for rid in groups.keys():
-                groupname = groups[rid]["groupname"]
-                grouptype = groups[rid]["type"]
-                details = get_group_details_from_rid(rid, groupname, grouptype, target, creds)
-
-                if details.retval:
-                    print_success(details.retmsg)
-                else:
-                    output = process_error(details.retmsg, ["groups"], module_name, output)
-                groups[rid]["details"] = details.retval
-
-        print_success(f"After merging groups results we have {len(groups.keys())} groups total:\n{yaml.dump(groups).rstrip()}")
-    output["groups"] = groups
-    return output
-
-def run_module_rid_cycling(cycle_params, target, creds, detailed):
-    '''
-    Run module RID cycling.
-    '''
-    module_name = "module_rid_cycling"
-    print_heading(f"Users, Groups and Machines on {target.host} via RID cycling")
-    output = cycle_params.enumerated_input
-
-    # Try to enumerate SIDs first, if we don't have the domain SID already
-    if output["domain_sid"]:
-        sids_list = [output["domain_sid"]]
-    else:
-        print_info("Trying to enumerate SIDs")
-        sids = enum_sids(cycle_params.known_usernames, target, creds)
-        if sids.retval is None:
-            output = process_error(sids.retmsg, ["users", "groups", "machines"], module_name, output)
-            return output
-        print_success(sids.retmsg)
-        sids_list = sids.retval
-
-    # Keep track of what we found...
-    found_count = {"users": 0, "groups": 0, "machines": 0}
-
-    # Run...
-    for sid in sids_list:
-        print_info(f"Trying SID {sid}")
-        rid_cycler = rid_cycle(sid, cycle_params.rid_ranges, target, creds)
-        for result in rid_cycler:
-            # We need the top level key to find out whether we got users, groups, machines or the domain_sid...
-            top_level_key = list(result.retval.keys())[0]
-
-            # We found the domain_sid...
-            if top_level_key == 'domain_sid':
-                output['domain_sid'] = result.retval['domain_sid']
-                continue
-
-            # ...otherwise "users", "groups" or "machines".
-            # Get the RID of what we found (user, group or machine RID) as well as the corresponding entry (dict).
-            rid = list(result.retval[top_level_key])[0]
-            entry = result.retval[top_level_key][rid]
-
-            # If we have the RID already, we continue...
-            if output[top_level_key] is not None and rid in output[top_level_key]:
-                continue
-
-            print_success(result.retmsg)
-            found_count[top_level_key] += 1
-
-            # ...else we add the result at the right position.
-            if output[top_level_key] is None:
-                output[top_level_key] = {}
-            output[top_level_key][rid] = entry
-
-            if detailed and ("users" in top_level_key or "groups" in top_level_key):
-                if "users" in top_level_key:
-                    rid, entry = list(result.retval["users"].items())[0]
-                    name = entry["username"]
-                    details = get_user_details_from_rid(rid, name, target, creds)
-                elif "groups" in top_level_key:
-                    rid, entry = list(result.retval["groups"].items())[0]
-                    groupname = entry["groupname"]
-                    grouptype = entry["type"]
-                    details = get_group_details_from_rid(rid, groupname, grouptype, target, creds)
-
-                if details.retval:
-                    print_success(details.retmsg)
-                else:
-                    output = process_error(details.retmsg, [top_level_key], module_name, output)
-                output[top_level_key][rid]["details"] = details.retval
-
-    if found_count["users"] == 0 and found_count["groups"] == 0 and found_count["machines"] == 0:
-        output = process_error("Could not find any (new) users, (new) groups or (new) machines", ["users", "groups", "machines"], module_name, output)
-    else:
-        print_success(f"Found {found_count['users']} user(s), {found_count['groups']} group(s), {found_count['machines']} machine(s) in total")
-
-    return output
-
-def run_module_enum_shares(target, creds):
-    '''
-    Run module enum shares.
-    '''
-    module_name = "module_enum_shares"
-    print_heading(f"Share enumeration on {target.host}")
-    output = {}
-    shares = None
-
-    enum = enum_shares(target, creds)
-    if enum.retval is None:
-        output = process_error(enum.retmsg, ["shares"], module_name, output)
-    else:
-        # This will print success even if no shares were found (which is not an error.)
-        print_success(enum.retmsg)
-        shares = enum.retval
-        # Check access if there are any shares.
-        if enum.retmsg:
-            for share in shares.keys():
-                print_info(f"Testing share {share}")
-                access = check_share_access(share, target, creds)
-                if access.retval is None:
-                    output = process_error(access.retmsg, ["shares"], module_name, output)
-                    continue
-                print_success(access.retmsg)
-                shares[share] = access.retval
-
-    output["shares"] = shares
-    return output
-
-def run_module_bruteforce_shares(brute_params, target, creds):
-    '''
-    Run module bruteforce shares.
-    '''
-    module_name = "module_bruteforce_shares"
-    print_heading(f"Share bruteforcing on {target.host}")
-    output = brute_params.enumerated_input
-
-    found_count = 0
-    try:
-        with open(brute_params.shares_file) as f:
-            for share in f:
-                share = share.rstrip()
-
-                # Skip all shares we might have found by the enum_shares module already
-                if output["shares"] is not None and share in output["shares"].keys():
-                    continue
-
-                result = check_share_access(share, target, creds)
-                if result.retval:
-                    if output["shares"] is None:
-                        output["shares"] = {}
-                    print_success(f"Found share: {share}")
-                    print_success(result.retmsg)
-                    output["shares"][share] = result.retval
-                    found_count += 1
-    except:
-        output = process_error(f"Failed to open {brute_params.shares_file}", ["shares"], module_name, output)
-
-    if found_count == 0:
-        output = process_error("Could not find any (new) shares", ["shares"], module_name, output)
-    else:
-        print_success(f"Found {found_count} (new) share(s) in total")
-
-    return output
-
-def run_module_enum_policy(target, creds):
-    '''
-    Run module enum policy.
-    '''
-    module_name = "module_enum_policy"
-    print_heading(f"Policy information for {target.host}")
-    output = {}
-
-    for port in [139, 445]:
-        print_info(f"Trying port {port}/tcp (timeout: {target.timeout}s)")
-        target.port = port
-        enum = enum_policy(target, creds)
-        if enum.retval is None:
-            output = process_error(enum.retmsg, ["policy"], module_name, output)
-            output["policy"] = None
-        else:
-            print_success(enum.retmsg)
-            output["policy"] = enum.retval
-
-    return output
-
-def run_module_enum_printers(target, creds):
-    '''
-    Run module enum printers.
-    '''
-    module_name = "module_enum_printers"
-    print_heading(f"Printer information for {target.host}")
-    output = {}
-
-    enum = enum_printers(target, creds)
-    if enum.retval is None:
-        output = process_error(enum.retmsg, ["printers"], module_name, output)
-        output["printers"] = None
-    else:
-        print_success(enum.retmsg)
-        output["printers"] = enum.retval
-    return output
+### Validation Functions
 
 def valid_timeout(timeout):
     try:
@@ -1838,6 +1897,60 @@ def valid_host(host):
     if re.match(r"^([a-zA-Z0-9\._-]+)$", host):
         return True
     return False
+
+
+### Print Functions and Error Processing
+
+def print_heading(text):
+    output = f"|    {text}    |"
+    length = len(output)
+    print()
+    print(" " + "="*(length-2))
+    print(output)
+    print(" " + "="*(length-2))
+
+def print_success(msg):
+    print(f"{Colors.green}[+] {msg + Colors.reset}")
+
+def print_error(msg):
+    print(f"{Colors.red}[-] {msg + Colors.reset}")
+
+def print_info(msg):
+    print(f"{Colors.blue}[*] {msg + Colors.reset}")
+
+def print_verbose(msg):
+    print(f"[V] {msg}")
+
+def process_error(msg, affected_entries, module_name, output_dict):
+    '''
+    Helper function to print error and update output dictionary at the same time.
+    '''
+    print_error(msg)
+
+    if not "errors" in output_dict:
+        output_dict["errors"] = {}
+
+    for entry in affected_entries:
+        if not entry in output_dict["errors"]:
+            output_dict["errors"].update({entry: {}})
+
+        if not module_name in output_dict["errors"][entry]:
+            output_dict["errors"][entry].update({module_name: []})
+
+        output_dict["errors"][entry][module_name].append(msg)
+    return output_dict
+
+def abort(code, msg):
+    '''
+    This function is used to abort() the tool run on error. It will take a status code
+    as well as an error message. The error message will be printed out, the status code will
+    be used as exit code.
+    '''
+    print_error(msg)
+    sys.exit(code)
+
+
+### Argument Processing
 
 def check_args(argv):
     global global_verbose
@@ -1914,6 +2027,9 @@ def check_args(argv):
 
     return args
 
+
+### Dependency Checks
+
 def check_dependencies():
     missing = []
 
@@ -1927,6 +2043,9 @@ def check_dependencies():
         print_error('     For Debian derivates (like Ubuntu) or ArchLinux, you need to install the "smbclient" package.')
         print_error('     For Fedora derivates (like RHEL, CentOS), you need to install the "samba-common-tools" and "samba-client" package.')
         abort(1, "Exiting.")
+
+
+### Run!
 
 def main():
     print("ENUM4LINUX-NG")
@@ -1968,70 +2087,71 @@ def main():
 
     # Checks if host is a parent/child domain controller, try to get long domain name
     if args.L or args.A or args.As:
-        result = run_module_ldapsearch(target)
+        #result = run_module_ldapsearch(target)
+        result = EnumLdapDomainInfo(target).run()
         if not target.workgroup and result["long_domain"]:
             target.update_workgroup(result["long_domain"], True)
         output.update(result)
 
     # Try to retrieve workstation and nbtstat information
     if args.N or args.A:
-        result = run_module_netbios(target)
+        result = EnumNetbios(target).run()
         if not target.workgroup and result["workgroup"]:
             target.update_workgroup(result["workgroup"])
         output.update(result)
 
     # Check for user credential and null sessions
-    result = run_module_session_check(target, creds)
+    result = EnumSessions(target, creds).run()
     output.update(result)
     if not output.as_dict()['sessions_possible']:
         abort(1, "Aborting remainder of tests.")
 
     # Try to get domain name and sid via lsaquery
-    result = run_module_lsaquery(target, creds)
+    result = EnumLsaqueryDomainInfo(target, creds).run()
     if not target.workgroup and result["workgroup"]:
         target.update_workgroup(result["workgroup"])
     output.update(result)
 
     # Get OS information like os version, server type string...
     if args.O or args.A or args.As:
-        result = run_module_srvinfo(target, creds)
+        result = EnumOsInfo(target, creds).run()
         output.update(result)
 
     # Enum users
     if args.U or args.A or args.As:
-        result = run_module_enum_users(target, creds, args.d)
+        result = EnumUsersRpc(target, creds, args.d).run()
         output.update(result)
 
     # Enum groups
     if args.G or args.Gm or args.A or args.As:
-        result = run_module_enum_groups(target, creds, args.Gm, args.d)
+        result = EnumGroupsRpc(target, creds, args.Gm, args.d).run()
         output.update(result)
 
     # Enum shares
     if args.S or args.A or args.As:
-        result = run_module_enum_shares(target, creds)
+        result = EnumShares(target, creds).run()
         output.update(result)
 
     # Enum password policy
     if args.P or args.A or args.As:
-        result = run_module_enum_policy(target, creds)
+        result = EnumPolicy(target, creds).run()
         output.update(result)
 
     # Enum printers
     if args.I or args.A or args.As:
-        result = run_module_enum_printers(target, creds)
+        result = EnumPrinters(target, creds).run()
         output.update(result)
 
     # RID Cycling (= bruteforce users, groups and machines)
     if args.R:
         cycle_params.set_enumerated_input(output.as_dict())
-        result = run_module_rid_cycling(cycle_params, target, creds, args.d)
+        result = RidCycling(cycle_params, target, creds, args.d).run()
         output.update(result)
 
     # Brute force shares
     if args.shares_file:
         share_brute_params.set_enumerated_input(output.as_dict())
-        result = run_module_bruteforce_shares(share_brute_params, target, creds)
+        result = BruteForceShares(share_brute_params, target, creds).run()
         output.update(result)
 
     elapsed_time = datetime.now() - start_time
