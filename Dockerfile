@@ -1,4 +1,4 @@
-FROM python:3.8-alpine3.12
+FROM python:3.8-alpine
 
 RUN apk upgrade
 RUN apk --update add --no-cache samba-common-tools python3 py3-pip samba-client libffi-dev openssl-dev
