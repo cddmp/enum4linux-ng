@@ -415,7 +415,7 @@ class EnumSessions():
                   "random_user_session_possible":False}
 
         # Check for legacy session
-        print_info(f"Check for legacy session (SMBv1) (timeout: {self.target.timeout}s)")
+        print_info(f"Check for legacy SMBv1 session (timeout: {self.target.timeout}s)")
         legacy_session = self.check_legacy_session()
         if legacy_session.retval is None:
             output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
