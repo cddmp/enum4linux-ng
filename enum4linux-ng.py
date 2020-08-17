@@ -1435,7 +1435,7 @@ class EnumShares():
 
         if shares:
             return Result(shares, f"Found {len(shares.keys())} share(s): {','.join(shares.keys())}")
-        return Result(shares, f"Found 0 share(s) for user '{creds.user}' with password '{creds.pw}', try a different user")
+        return Result(shares, f"Found 0 share(s) for user '{self.creds.user}' with password '{self.creds.pw}', try a different user")
 
     def check_access(self, share):
         '''
