@@ -3,9 +3,10 @@
 <strong>A next generation version of enum4linux</strong>
 </p>
 <p align="center">
-<img src="https://img.shields.io/badge/python-3_6-blue.svg"/>
-<img src="https://img.shields.io/badge/python-3_7-blue.svg"/>
-<img src="https://img.shields.io/badge/python-3_8-blue.svg"/
+<img src="https://img.shields.io/badge/python-3.6-blue.svg"/>
+<img src="https://img.shields.io/badge/python-3.7-blue.svg"/>
+<img src="https://img.shields.io/badge/python-3.8-blue.svg"/>
+<img src="https://img.shields.io/badge/License-GPLv3-green.svg"/>
 </p>
 
 enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs now CiscoCXSecurityLabs) enum4linux.pl, a tool for enumerating information from Windows and Samba systems, aimed for security professionals and CTF player. The tool is mainly a wrapper around the Samba tools `nmblookup`, `net`, `rpcclient` and `smbclient`.
@@ -37,8 +38,7 @@ If you prefer a Docker based installation, an example run can be found [below](#
 ### Demo
 This demonstrates a run against Windows Server 2012 R2 standard installation. A user 'Tester' with password 'Start123!' was created. Firewall access was allowed.
 
-![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo.gif)
-
+![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo.gi
 ## Installing dependencies
 The tool uses the samba clients tools, namely:
 - nmblookup
