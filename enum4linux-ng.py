@@ -67,6 +67,7 @@ import json
 import os
 import random
 import re
+import socket
 import shutil
 import shlex
 import subprocess
@@ -414,7 +415,7 @@ class EnumSessions():
                   "random_user_session_possible":False}
 
         # Check for legacy session
-        print_info("Check for legacy session (SMBv1)")
+        print_info(f"Check for legacy session (SMBv1) (timeout: {self.target.timeout}s)")
         legacy_session = self.check_legacy_session()
         if legacy_session.retval is None:
             output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
@@ -480,12 +481,12 @@ class EnumSessions():
                 return Result(True, "Server supports only SMBv1")
             return Result(False, "Server supports dialects higher SMBv1")
         except Exception as e:
-            if len(e.args) == 2 and isinstance(e.args[1], ConnectionRefusedError):
-                if e.args[1].errno == 111:
-                    error = "Connection refused"
-                return Result(None, f"SMB connection error: {error}")
-            else:
-                return Result(None, f"SMB connection error")
+            if len(e.args) == 2:
+                if isinstance(e.args[1], ConnectionRefusedError):
+                    return Result(None, f"SMB connection error: Connection refused")
+                if isinstance(e.args[1], socket.timeout):
+                    return Result(None, f"SMB connection error: timed out")
+            return Result(None, f"SMB connection error")
 
     def check_user_session(self, creds, random_user_session=False):
         '''
