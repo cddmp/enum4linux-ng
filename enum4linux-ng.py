@@ -473,7 +473,7 @@ class EnumSessions():
         '''
 
         try:
-            smb = smbconnection.SMBConnection(self.target.host, self.target.host)
+            smb = smbconnection.SMBConnection(self.target.host, self.target.host, timeout=self.target.timeout)
             dialect = smb.getDialect()
             smb.close()
             if dialect == smbconnection.SMB_DIALECT:
@@ -1977,7 +1977,7 @@ def check_args(argv):
     parser.add_argument("-k", dest="users", default=CONST_KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {CONST_KNOWN_USERNAMES}).\nUsed to get sid with "lookupsid known_username"')
     parser.add_argument("-r", dest="ranges", default=CONST_RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {CONST_RID_RANGES})")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for share names")
-    parser.add_argument("-t", dest="timeout", default=CONST_TIMEOUT, help=f"Sets connection timeout in seconds, affects -L and -P (default: {CONST_TIMEOUT}s)")
+    parser.add_argument("-t", dest="timeout", default=CONST_TIMEOUT, help=f"Sets connection timeout in seconds, affects -L, -P and session checks (default: {CONST_TIMEOUT}s)")
     parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file")
     parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
