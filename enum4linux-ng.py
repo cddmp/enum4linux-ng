@@ -159,6 +159,18 @@ CONST_DOMAIN_FIELDS = {
         0x00000020: "DOMAIN_PASSWORD_REFUSE_PASSWORD_CHANGE"
         }
 
+# Source: https://docs.microsoft.com/en-us/windows/win32/sysinfo/operating-system-version
+CONST_OS_VERSIONS = {
+        "10.0": "Windows 10, Windows Server 2019, Windows Server 2016",
+        "6.3": "Windows 8.1, Windows Server 2012 R2",
+        "6.2": "Windows 8, Windows Server 2012",
+        "6.1": "Windows 7, Windows Server 2008 R2",
+        "6.0": "Windows Vista, Windows Server 2008",
+        "5.2": "Windows XP 64-Bit Edition, Windows Server 2003, Windows Server 2003 R2",
+        "5.1": "Windows XP",
+        "5.0": "Windows 2000"
+        }
+
 CONST_DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
 CONST_RID_RANGES = "500-550,1000-1050"
 CONST_KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
@@ -820,11 +832,29 @@ class EnumOsInfo():
         if not os_info:
             return Result(None, "Could not get OS information")
 
+        if "os_version" in os_info and "server_type_string" in os_info:
+            os_info["os"] = self.os_info_to_human(os_info)
+
         retmsg = "The following OS information were found:\n"
         for key, value in os_info.items():
             retmsg += (f"{key:18} = {value}\n")
         retmsg = retmsg.rstrip()
         return Result(os_info, retmsg)
+
+    def os_info_to_human(self, os_info):
+        server_type_string = os_info["server_type_string"]
+        os_version = os_info["os_version"]
+
+        if "Samba" in server_type_string:
+            match = re.search(r".*\((.*)\)", server_type_string)
+            if match:
+                return f"Linux ({match.group(1)})"
+
+        if os_version in CONST_OS_VERSIONS:
+            return CONST_OS_VERSIONS[os_version]
+
+        return "unknown"
+
 
 
 ### Users Enumeration via RPC
