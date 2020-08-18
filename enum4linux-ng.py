@@ -848,7 +848,7 @@ class EnumOsInfo():
         if "Samba" in server_type_string:
             match = re.search(r".*\((.*)\)", server_type_string)
             if match:
-                return f"Linux ({match.group(1)})"
+                return f"Linux/Unix ({match.group(1)})"
 
         if os_version in CONST_OS_VERSIONS:
             return CONST_OS_VERSIONS[os_version]
