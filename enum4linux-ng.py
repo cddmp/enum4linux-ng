@@ -1588,6 +1588,7 @@ class EnumPolicy():
             else:
                 print_success(enum.retmsg)
                 output["policy"] = enum.retval
+                break
 
         return output
 
