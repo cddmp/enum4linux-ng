@@ -169,7 +169,7 @@ CONST_OS_VERSIONS = {
         "5.2": "Windows XP 64-Bit Edition, Windows Server 2003, Windows Server 2003 R2",
         "5.1": "Windows XP",
         "5.0": "Windows 2000",
-        "4.9": "Samba"
+        "4.9": "Linux/Unix (Samba)"
         }
 
 CONST_DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
@@ -846,12 +846,10 @@ class EnumOsInfo():
         server_type_string = os_info["server_type_string"]
         os_version = os_info["os_version"]
 
-        if "4.9" in os_version:
-            if "Samba" in server_type_string:
-                match = re.search(r".*\((.*)\)", server_type_string)
-                if match:
-                    return  f"Linux/Unix ({match.group(1)})"
-            return "Linux/Unix (Samba)"
+        if "4.9" in os_version and "Samba" in server_type_string:
+            match = re.search(r".*\((.*)\)", server_type_string)
+            if match:
+                return  f"Linux/Unix ({match.group(1)})"
 
         if os_version in CONST_OS_VERSIONS:
             return CONST_OS_VERSIONS[os_version]
