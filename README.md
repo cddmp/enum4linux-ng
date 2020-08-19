@@ -38,6 +38,9 @@ This demonstrates a run against Windows Server 2012 R2 standard installation. A 
 
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo.gif)
 
+The second demo shows a run against Metasploitable2. This time no credentials were provided. The tool automatically detects that it needs to use SMBv1. Once the enumeration is finished, I scroll up so that the results become more clear.
+![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo2.gif)
+
 ## Installing dependencies
 The tool uses the samba clients tools, namely:
 - nmblookup
