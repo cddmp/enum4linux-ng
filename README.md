@@ -34,11 +34,11 @@ If you use the tool: Don't use it for illegal purposes.
 If you prefer a Docker based installation, an example run can be found [below](#Docker).
 
 ### Demo
-This demonstrates a run against Windows Server 2012 R2 standard installation. A user 'Tester' with password 'Start123!' was created. Firewall access was allowed.
+This demonstrates a run against Windows Server 2012 R2 standard installation. A user 'Tester' with password 'Start123!' was created. Firewall access was allowed. Once the enumeration is finished, I scroll up so that the results become more clear.
 
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo.gif)
 
-The second demo shows a run against Metasploitable2. This time no credentials were provided. The tool automatically detects that it needs to use SMBv1. Once the enumeration is finished, I scroll up so that the results become more clear.
+The second demo shows a run against Metasploitable2. This time no credentials were provided. The tool automatically detects that it needs to use SMBv1. Again I scroll up so that the results become more clear.
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo2.gif)
 
 ## Installing dependencies
