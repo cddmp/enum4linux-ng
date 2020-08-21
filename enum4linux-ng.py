@@ -1185,6 +1185,8 @@ class EnumGroupsRpc():
         for member in members_string.splitlines():
             if "Couldn't lookup SIDs" in member:
                 return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}) due to insufficient user permissions, try a different user")
+            if "Couldn't find group" in member:
+                return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}), group could not be found")
             members.append(member)
 
         return Result(','.join(members), f"Found {len(members)} member(s) for {grouptype} group '{groupname}' (RID {rid})")
