@@ -70,7 +70,7 @@ import tempfile
 import sys
 from datetime import datetime
 from collections import OrderedDict
-from impacket import smbconnection
+from impacket import nmb, smbconnection
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
@@ -424,20 +424,23 @@ class EnumSessions():
                   "random_user_session_possible":False}
 
         # Check for legacy session
-        print_info(f"Check for legacy SMBv1 session (timeout: {self.target.timeout}s)")
-        legacy_session = self.check_legacy_session()
-        if legacy_session.retval is None:
-            output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
-        else:
-            output["legacy_session"] = legacy_session.retval
-            print_success(legacy_session.retmsg)
-            if legacy_session.retval:
-                print_info("Switching to legacy mode for further enumeration")
-                try:
-                    samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
-                    self.target.samba_config = samba_config
-                except:
-                    output = process_error("Switching to legacy mode failed.", ["legacy_session"], module_name, output)
+        for port in [139, 445]:
+            print_info(f"Trying port {port}/tcp for legacy SMBv1 session check (timeout: {self.target.timeout}s)")
+            self.target.port = port
+            legacy_session = self.check_legacy_session()
+            if legacy_session.retval is None:
+                output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
+            else:
+                output["legacy_session"] = legacy_session.retval
+                print_success(legacy_session.retmsg)
+                if legacy_session.retval:
+                    print_info("Switching to legacy mode for further enumeration")
+                    try:
+                        samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
+                        self.target.samba_config = samba_config
+                    except:
+                        output = process_error("Switching to legacy mode failed.", ["legacy_session"], module_name, output)
+                break
 
         # Check null session
         print_info("Check for null session")
@@ -483,7 +486,7 @@ class EnumSessions():
         '''
 
         try:
-            smb = smbconnection.SMBConnection(self.target.host, self.target.host, timeout=self.target.timeout)
+            smb = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             dialect = smb.getDialect()
             smb.close()
             if dialect == smbconnection.SMB_DIALECT:
@@ -495,6 +498,8 @@ class EnumSessions():
                     return Result(None, f"SMB connection error: Connection refused")
                 if isinstance(e.args[1], socket.timeout):
                     return Result(None, f"SMB connection error: timed out")
+            if isinstance(e, nmb.NetBIOSError):
+                return Result(None, f"SMB connection error: session failed")
             return Result(None, f"SMB connection error")
 
     def check_user_session(self, creds, random_user_session=False):
