@@ -1460,7 +1460,7 @@ class EnumShares():
             return Result(None, "Could not list shares: NT_STATUS_LOGON_FAILURE")
 
         shares = {}
-        match_list = re.findall(r"\n\s*([ \S]+?)\s+(?:Disk|IPC|Printer)", shares_result, re.IGNORECASE)
+        match_list = re.findall(r"\n\s*([\S]+?)\s+(?:Disk|IPC|Printer)", shares_result, re.IGNORECASE)
         if match_list:
             for share in match_list:
                 shares[share] = {}
@@ -1501,6 +1501,9 @@ class EnumShares():
 
         if "NT_STATUS_INVALID_PARAMETER" in output:
             return Result(None, "Could not check share: NT_STATUS_INVALID_PARAMETER")
+
+        if "NT_STATUS_WRONG_PASSWORD" in output:
+            return Result(None, "Could not check share: NT_STATUS_WRONG_PASSWORD")
 
         if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", output) or re.search(r".*blocks\sof\ssize.*blocks\savailable.*", output):
             return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
