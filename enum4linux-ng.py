@@ -1347,7 +1347,7 @@ class RidCycling():
             command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"lookupnames {known_username}", self.target.host]
             sid_string = run(command, f"Attempting to get SID for user {known_username}", self.target.samba_config)
 
-            if "NT_STATUS_ACCESS_DENIED" or "NT_STATUS_NONE_MAPPED" in sid_string:
+            if "NT_STATUS_ACCESS_DENIED" in sid_string or "NT_STATUS_NONE_MAPPED" in sid_string:
                 continue
 
             for pattern in sid_patterns_list:
@@ -1369,7 +1369,7 @@ class RidCycling():
                         sids.append(result)
 
         if sids:
-            return Result(sids, f"Found {len(sids)} SIDs")
+            return Result(sids, f"Found {len(sids)} SID(s)")
         return Result(None, "Could not get any SIDs")
 
     def rid_cycle(self, sid, rid_ranges):
