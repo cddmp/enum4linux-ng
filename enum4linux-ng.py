@@ -1053,6 +1053,17 @@ class EnumUsersRpc():
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"queryuser {rid}", self.target.host]
         result = run(command, "Attempting to get detailed user info", self.target.samba_config)
 
+        if not result.retval:
+            return Result(None, f"Could not find details for user '{name}': {result.retmsg}")
+
+        nt_status_error = nt_status_error_filter(result.retmsg)
+        if nt_status_error:
+            return Result(None, f"Could not find details for user '{name}: {nt_status_error}")
+
+        #FIXME: Examine
+        if "NT_STATUS_NO_SUCH_USER" in result.retmsg:
+            return Result(None, f"Could not find details for user '{name}: NT_STATUS_NO_SUCH_USER")
+
         match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", result.retmsg, re.DOTALL)
         if match:
             user_info = match.group(1)
@@ -1237,6 +1248,13 @@ class EnumGroupsRpc():
         details = OrderedDict()
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f'{self.creds.user}%{self.creds.pw}', "-c", f"querygroup {rid}", self.target.host]
         result = run(command, "Attempting to get detailed group info", self.target.samba_config)
+
+        if not result.retval:
+            return Result(None, f"Could not find details for {grouptype} group '{groupname}': {result.retmsg}")
+
+        nt_status_error = nt_status_error_filter(result.retmsg)
+        if nt_status_error:
+            return Result(None, f"Could not find details for {grouptype} group '{groupname}': {nt_status_error}")
 
         #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
         if "NT_STATUS_NO_SUCH_GROUP" in result.retmsg:
