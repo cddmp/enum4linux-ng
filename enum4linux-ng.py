@@ -173,6 +173,14 @@ CONST_OS_VERSIONS = {
         "4.5": "Linux/Unix (Samba)"
         }
 
+# Filter for various samba client setup related error messages including bug
+# https://bugzilla.samba.org/show_bug.cgi?id=13925
+CONST_SAMBA_CLIENT_ERROR_FILTER = [
+        "Unable to initialize messaging context",
+        "WARNING: no network interfaces found",
+        "Can't load /etc/samba/smb.conf - run testparm to debug it"
+    ]
+
 CONST_DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
 CONST_RID_RANGES = "500-550,1000-1050"
 CONST_KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
@@ -1909,11 +1917,11 @@ def run(command, description="", samba_config=None):
         output = e.output
 
     output = output.decode()
-    # Workaround for Samba bug (see https://bugzilla.samba.org/show_bug.cgi?id=13925)
-    output = output.replace("Unable to initialize messaging context\n", "")
-    output = output.replace("WARNING: no network interfaces found\n", "")
-    output = output.replace("Can't load /etc/samba/smb.conf - run testparm to debug it\n", "")
+    for line in output.splitlines(True):
+        if any(entry in line for entry in CONST_SAMBA_CLIENT_ERROR_FILTER):
+            output = output.replace(line, "")
     output = output.rstrip('\n')
+
     return output
 
 
