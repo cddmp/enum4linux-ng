@@ -510,7 +510,7 @@ class EnumSessions():
 
         try:
             smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            dialect = smb.getDialect()
+            dialect = smb_conn.getDialect()
             smb_conn.close()
             if dialect == smbconnection.SMB_DIALECT:
                 return Result(True, "Server supports only SMBv1")
