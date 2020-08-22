@@ -70,7 +70,7 @@ import tempfile
 import sys
 from datetime import datetime
 from collections import OrderedDict
-from impacket import nmb, smbconnection
+from impacket import nmb, smb, smbconnection, smb3
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
@@ -404,6 +404,8 @@ class EnumNetbios():
         return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
 
 
+#FIXME: The session checks need refactoring. It would be better to do the SMB checks separately.
+#       The user session checks should then only be run, if the SMB session checks succeeded.
 ### Session Checks
 
 class EnumSessions():
@@ -486,9 +488,9 @@ class EnumSessions():
         '''
 
         try:
-            smb = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             dialect = smb.getDialect()
-            smb.close()
+            smb_conn.close()
             if dialect == smbconnection.SMB_DIALECT:
                 return Result(True, "Server supports only SMBv1")
             return Result(False, "Server supports dialects higher SMBv1")
@@ -499,6 +501,8 @@ class EnumSessions():
                 if isinstance(e.args[1], socket.timeout):
                     return Result(None, f"SMB connection error: timed out")
             if isinstance(e, nmb.NetBIOSError):
+                return Result(None, f"SMB connection error: session failed")
+            if isinstance(e, smb.SessionError) or isinstance(e, smb3.SessionError):
                 return Result(None, f"SMB connection error: session failed")
             return Result(None, f"SMB connection error")
 
@@ -1669,9 +1673,9 @@ class EnumPolicy():
         Tries to connect to the SAMR named pipe and get the domain handle.
         '''
         try:
-            smb = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            smb.login(self.creds.user, self.creds.pw, self.target.workgroup)
-            rpctransport = transport.SMBTransport(smb_connection=smb, filename=r'\samr', remoteName=self.target.host)
+            smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+            smb_conn.login(self.creds.user, self.creds.pw, self.target.workgroup)
+            rpctransport = transport.SMBTransport(smb_connection=smb_conn, filename=r'\samr', remoteName=self.target.host)
             dce = DCERPC_v5(rpctransport)
             dce.connect()
             dce.bind(samr.MSRPC_UUID_SAMR)
