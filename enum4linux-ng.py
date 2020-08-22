@@ -1162,6 +1162,9 @@ class EnumGroupsRpc():
         if enum.retval is None:
             return enum
 
+        if not enum.retval:
+            return Result({}, f"Found 0 group(s) via '{grouptype_dict[grouptype]}'")
+
         match = re.search("(group:.*)", enum.retval, re.DOTALL)
         if not match:
             return Result(None, f"Could not parse result of {grouptype_dict[grouptype]} command, please open a GitHub issue")
@@ -1393,11 +1396,11 @@ class RidCycling():
 
         # Try to get SID list via lsaenumsid
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "lsaenumsid", self.target.host]
-        sids_string = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config)
+        result = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config)
 
-        if "NT_STATUS_ACCESS_DENIED" not in sids_string:
+        if "NT_STATUS_ACCESS_DENIED" not in result.retmsg:
             for pattern in sid_patterns_list:
-                match_list = re.findall(pattern, sids_string)
+                match_list = re.findall(pattern, result.retmsg)
                 for result in match_list:
                     if result not in sids:
                         sids.append(result)
