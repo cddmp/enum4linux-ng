@@ -1051,9 +1051,9 @@ class EnumUsersRpc():
 
         details = OrderedDict()
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"queryuser {rid}", self.target.host]
-        output = run(command, "Attempting to get detailed user info", self.target.samba_config)
+        result = run(command, "Attempting to get detailed user info", self.target.samba_config)
 
-        match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", output, re.DOTALL)
+        match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", result.retmsg, re.DOTALL)
         if match:
             user_info = match.group(1)
             user_info = user_info.replace("\t", "")
