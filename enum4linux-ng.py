@@ -1236,13 +1236,13 @@ class EnumGroupsRpc():
 
         details = OrderedDict()
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f'{self.creds.user}%{self.creds.pw}', "-c", f"querygroup {rid}", self.target.host]
-        output = run(command, "Attempting to get detailed group info", self.target.samba_config)
+        result = run(command, "Attempting to get detailed group info", self.target.samba_config)
 
         #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
-        if "NT_STATUS_NO_SUCH_GROUP" in output:
+        if "NT_STATUS_NO_SUCH_GROUP" in result.retmsg:
             return Result(None, f"Could not get details for {grouptype} group '{groupname}' (RID {rid}): NT_STATUS_NO_SUCH_GROUP")
 
-        match = re.search("([^\n]*Group Name.*Num Members[^\n]*)", output, re.DOTALL)
+        match = re.search("([^\n]*Group Name.*Num Members[^\n]*)", result.retmsg, re.DOTALL)
         if match:
             group_info = match.group(1)
             group_info = group_info.replace("\t", "")
