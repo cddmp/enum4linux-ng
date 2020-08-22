@@ -1887,7 +1887,7 @@ class EnumServices():
         if nt_status_error:
             return Result(None, f"Could not get services via 'net rpc service list': {nt_status_error}")
 
-        match_list = re.findall(r"([^\s]*)\s*\"(.*)\"", result, re.MULTILINE)
+        match_list = re.findall(r"([^\s]*)\s*\"(.*)\"", result.retmsg, re.MULTILINE)
         if not match_list:
             return Result(None, "Could not parse result of 'net rpc service list' command, please open a GitHub issue")
 
