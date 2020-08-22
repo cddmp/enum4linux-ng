@@ -1214,7 +1214,8 @@ class EnumGroupsRpc():
         the 'net rpc group members' command.
         '''
         command = ["net", "rpc", "group", "members", groupname, "-W", self.target.workgroup, "-I", self.target.host, "-U", f"{self.creds.user}%{self.creds.pw}"]
-        members_string = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
+        result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
+        members_string = result.retmsg
 
         members = []
         for member in members_string.splitlines():
