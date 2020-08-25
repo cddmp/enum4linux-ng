@@ -334,6 +334,7 @@ class Output:
     def as_dict(self):
         return self.out_dict
 
+
 ### NetBIOS Enumeration
 
 class EnumNetbios():
@@ -373,7 +374,7 @@ class EnumNetbios():
         result = run(command, "Trying to get NetBIOS names information")
 
         if not result.retval:
-            return Result(None, f"Could not get NetBIOS names information via 'nmblookup': {nmblookup_result.retmsg}")
+            return Result(None, f"Could not get NetBIOS names information via 'nmblookup': {result.retmsg}")
 
         if "No reply from" in result.retmsg:
             return Result(None, "Could not get NetBIOS names information via 'nmblookup': host does not reply")
@@ -891,7 +892,6 @@ class EnumOsInfo():
             return CONST_OS_VERSIONS[os_version]
 
         return "unknown"
-
 
 
 ### Users Enumeration via RPC
@@ -1621,7 +1621,7 @@ class BruteForceShares():
                         output["shares"][share] = result.retval
                         found_count += 1
         except:
-            output = process_error(f"Failed to open {brute_params.shares_file}", ["shares"], module_name, output)
+            output = process_error(f"Failed to open {self.brute_params.shares_file}", ["shares"], module_name, output)
 
         if found_count == 0:
             output = process_error("Could not find any (new) shares", ["shares"], module_name, output)
@@ -2244,7 +2244,6 @@ def main():
 
     # Checks if host is a parent/child domain controller, try to get long domain name
     if args.L or args.A or args.As:
-        #result = run_module_ldapsearch(target)
         result = EnumLdapDomainInfo(target).run()
         if not target.workgroup and result["long_domain"]:
             target.update_workgroup(result["long_domain"], True)
