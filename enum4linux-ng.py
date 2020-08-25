@@ -70,7 +70,8 @@ import tempfile
 import sys
 from datetime import datetime
 from collections import OrderedDict
-from impacket import nmb, smb, smbconnection, smb3
+from impacket import nmb, smb, smbconnection, smb3, nt_errors
+from impacket.smbconnection import SMB_DIALECT
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
@@ -182,11 +183,12 @@ CONST_SAMBA_CLIENT_ERROR_FILTER = [
     ]
 
 CONST_NT_STATUS_COMMON_ERRORS = [
-        "NT_STATUS_ACCESS_DENIED",
-        "NT_STATUS_LOGON_FAILURE",
-        "NT_STATUS_IO_TIMEOUT",
-        "NT_STATUS_NETWORK_UNREACHABLE",
-        "NT_STATUS_INVALID_PARAMETER",
+        "STATUS_ACCESS_DENIED",
+        "STATUS_LOGON_FAILURE",
+        "STATUS_IO_TIMEOUT",
+        "STATUS_NETWORK_UNREACHABLE",
+        "STATUS_INVALID_PARAMETER",
+        "STATUS_NOT_SUPPORTED",
         "WERR_ACCESS_DENIED"
     ]
 
@@ -426,8 +428,80 @@ class EnumNetbios():
         return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
 
 
-#FIXME: The session checks need refactoring. It would be better to do the SMB checks separately.
-#       The user session checks should then only be run, if the SMB session checks succeeded.
+### SMB checks
+
+class EnumSmb():
+    def __init__(self, target, detailed):
+        self.target = target
+        self.detailed = detailed
+
+    def run(self):
+        '''
+        Run SMB module which checks whether only SMBv1 is supported.
+        '''
+        module_name = "enum_smb"
+        print_heading(f"SMB dialect check on {self.target.host}")
+        output = {}
+
+        for port in [139, 445]:
+            print_info(f"Check for legacy SMBv1 on {port}/tcp (timeout: {self.target.timeout}s)")
+            self.target.port = port
+            result = self.check_smb1()
+            if result.retval is None:
+                output = process_error(result.retmsg, ["smb1_only"], module_name, output)
+            else:
+                output["smb1_only"] = result.retval
+                print_success(result.retmsg)
+                break
+
+        # Does the target only support SMBv1? Then enforce it!
+        if result.retval:
+            print_info("Enforcing legacy SMBv1 for further enumeration")
+            result = self.enforce_smb1()
+            if not result.retval:
+                output = process_error(result.retmsg, ["smb1_only"], module_name, output)
+
+        output["smb1_only"] = result.retval
+        return output
+
+    def enforce_smb1(self):
+        try:
+            samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
+            self.target.samba_config = samba_config
+            return Result(True, "")
+        except:
+            return Result(False, "Could not enforce SMBv1")
+
+    def check_smb1(self):
+        '''
+        Current implementations of the samba client tools will enforce at least SMBv2 by default. This will give false
+        negatives during session checks, if the target only supports SMBv1. Therefore, we try to find out here whether
+        the target system only speaks SMBv1.
+        '''
+
+        try:
+            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+            dialect = smb_conn.getDialect()
+            smb_conn.close()
+            if dialect == smbconnection.SMB_DIALECT:
+                return Result(True, "Server supports only SMBv1")
+            return Result(False, "Server supports dialects higher SMBv1")
+
+        except Exception as e:
+            if len(e.args) == 2:
+                if isinstance(e.args[1], ConnectionRefusedError):
+                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: Connection refused")
+                if isinstance(e.args[1], socket.timeout):
+                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: timed out")
+            if isinstance(e, nmb.NetBIOSError):
+                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
+            if isinstance(e, smb.SessionError) or isinstance(e, smb3.SessionError):
+                if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED:
+                    return Result(False, "Server supports dialects higher SMBv1")
+                return Result(None, f"SMB connection error: session failed")
+            return Result(None, f"SMB connection error on port {self.target.port}/tcp")
+
+
 ### Session Checks
 
 class EnumSessions():
@@ -440,31 +514,11 @@ class EnumSessions():
         Run session check module which tests for user and null sessions.
         '''
         module_name = "enum_sessions"
-        print_heading(f"SMB/RPC session checks on {self.target.host}")
+        print_heading(f"RPC session checks on {self.target.host}")
         output = {"sessions_possible":False,
-                  "legacy_session":False,
                   "null_session_possible":False,
                   "user_session_possible":False,
                   "random_user_session_possible":False}
-
-        # Check for legacy session
-        for port in [139, 445]:
-            print_info(f"Trying port {port}/tcp for legacy SMBv1 session check (timeout: {self.target.timeout}s)")
-            self.target.port = port
-            legacy_session = self.check_legacy_session()
-            if legacy_session.retval is None:
-                output = process_error(legacy_session.retmsg, ["legacy_session"], module_name, output)
-            else:
-                output["legacy_session"] = legacy_session.retval
-                print_success(legacy_session.retmsg)
-                if legacy_session.retval:
-                    print_info("Switching to legacy mode for further enumeration")
-                    try:
-                        samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
-                        self.target.samba_config = samba_config
-                    except:
-                        output = process_error("Switching to legacy mode failed.", ["legacy_session"], module_name, output)
-                break
 
         # Check null session
         print_info("Check for null session")
@@ -501,32 +555,6 @@ class EnumSessions():
             process_error("Sessions failed, neither null nor user sessions were possible.", ["sessions_possible", "null_session_possible", "user_session_possible", "random_user_session_possible"], module_name, output)
 
         return output
-
-    def check_legacy_session(self):
-        '''
-        Current implementations of the samba client tools will enforce at least SMBv2 by default. This will give false
-        negatives during session checks, if the target only supports SMBv1. Therefore, we try to find out here whether
-        the target system only speaks SMBv1.
-        '''
-
-        try:
-            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            dialect = smb_conn.getDialect()
-            smb_conn.close()
-            if dialect == smbconnection.SMB_DIALECT:
-                return Result(True, "Server supports only SMBv1")
-            return Result(False, "Server supports dialects higher SMBv1")
-        except Exception as e:
-            if len(e.args) == 2:
-                if isinstance(e.args[1], ConnectionRefusedError):
-                    return Result(None, f"SMB connection error: Connection refused")
-                if isinstance(e.args[1], socket.timeout):
-                    return Result(None, f"SMB connection error: timed out")
-            if isinstance(e, nmb.NetBIOSError):
-                return Result(None, f"SMB connection error: session failed")
-            if isinstance(e, smb.SessionError) or isinstance(e, smb3.SessionError):
-                return Result(None, f"SMB connection error: session failed")
-            return Result(None, f"SMB connection error")
 
     def check_user_session(self, creds, random_user_session=False):
         '''
@@ -2254,6 +2282,11 @@ def main():
         result = EnumNetbios(target).run()
         if not target.workgroup and result["workgroup"]:
             target.update_workgroup(result["workgroup"])
+        output.update(result)
+
+    # Enumerate supported SMB versions
+    if args.A or args.As:
+        result = EnumSmb(target, args.d).run()
         output.update(result)
 
     # Check for user credential and null sessions
