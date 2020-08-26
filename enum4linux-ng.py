@@ -1135,10 +1135,9 @@ class EnumGroupsRpc():
                     group_members = self.get_members_from_name(groupname, grouptype, rid)
                     if group_members.retval or group_members.retval == '':
                         print_success(group_members.retmsg)
-                        groups[rid]["members"] = group_members.retval
                     else:
-                        groups[rid]["members"] = ""
                         output = process_error(group_members.retmsg, ["groups"], module_name, output)
+                    groups[rid]["members"] = group_members.retval
 
             if self.detailed:
                 print_info("Enumerating group details")
