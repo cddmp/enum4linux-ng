@@ -595,10 +595,6 @@ class EnumSessions():
         if not result.retval:
             return Result(None, f"Server connection failed for {session_type} session: {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Server connection failed for {session_type} session: {nt_status_error}")
-
         if "case_sensitive" in result.retmsg:
             return Result(True, f"Server allows session using username '{user}', password '{pw}'")
         return Result(False, f"Server doesn't allow session using username '{user}', password '{pw}'")
@@ -776,10 +772,6 @@ class EnumLsaqueryDomainInfo():
         if not result.retval:
             return Result(None, f"Could not get domain information via 'lsaquery': {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not get domain information via 'lsaquery': {nt_status_error}")
-
         if result.retval:
             return Result(result.retmsg, "")
         return Result(None, "Could not get information via 'lsaquery'")
@@ -866,10 +858,6 @@ class EnumOsInfo():
 
         if not result.retval:
             return Result(None, f"Could not get OS info via 'srvinfo': {result.retmsg}")
-
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not get OS info via 'srvinfo': {nt_status_error}")
 
         return Result(result.retmsg, "")
 
@@ -995,10 +983,6 @@ class EnumUsersRpc():
         if not result.retval:
             return Result(None, f"Could not find users via 'querydispinfo': {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not find users via 'querydispinfo': {nt_status_error}")
-
         return Result(result.retmsg, "")
 
     def enumdomusers(self):
@@ -1013,10 +997,6 @@ class EnumUsersRpc():
 
         if not result.retval:
             return Result(None, f"Could not find users via 'enumdomusers': {result.retmsg}")
-
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not find users via 'enumdomusers': {nt_status_error}")
 
         return Result(result.retmsg, "")
 
@@ -1084,13 +1064,9 @@ class EnumUsersRpc():
         if not result.retval:
             return Result(None, f"Could not find details for user '{name}': {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not find details for user '{name}: {nt_status_error}")
-
         #FIXME: Examine
         if "NT_STATUS_NO_SUCH_USER" in result.retmsg:
-            return Result(None, f"Could not find details for user '{name}: NT_STATUS_NO_SUCH_USER")
+            return Result(None, f"Could not find details for user '{name}: STATUS_NO_SUCH_USER")
 
         match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", result.retmsg, re.DOTALL)
         if match:
@@ -1241,10 +1217,6 @@ class EnumGroupsRpc():
         if not result.retval:
             return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': {nt_status_error}")
-
         return Result(result.retmsg, "")
 
     def get_members_from_name(self, groupname, grouptype, rid):
@@ -1254,8 +1226,11 @@ class EnumGroupsRpc():
         '''
         command = ["net", "rpc", "group", "members", groupname, "-W", self.target.workgroup, "-I", self.target.host, "-U", f"{self.creds.user}%{self.creds.pw}"]
         result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
-        members_string = result.retmsg
 
+        if not result.retval:
+            return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}): {result.retmsg}")
+
+        members_string = result.retmsg
         members = []
         for member in members_string.splitlines():
             if "Couldn't lookup SIDs" in member:
@@ -1280,13 +1255,9 @@ class EnumGroupsRpc():
         if not result.retval:
             return Result(None, f"Could not find details for {grouptype} group '{groupname}': {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not find details for {grouptype} group '{groupname}': {nt_status_error}")
-
         #FIXME: Only works for domain groups, otherwise NT_STATUS_NO_SUCH_GROUP is returned
         if "NT_STATUS_NO_SUCH_GROUP" in result.retmsg:
-            return Result(None, f"Could not get details for {grouptype} group '{groupname}' (RID {rid}): NT_STATUS_NO_SUCH_GROUP")
+            return Result(None, f"Could not get details for {grouptype} group '{groupname}' (RID {rid}): STATUS_NO_SUCH_GROUP")
 
         match = re.search("([^\n]*Group Name.*Num Members[^\n]*)", result.retmsg, re.DOTALL)
         if match:
@@ -1427,10 +1398,10 @@ class RidCycling():
         # Try to get a valid SID from well-known user names
         for known_username in users.split(','):
             command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"lookupnames {known_username}", self.target.host]
-            result = run(command, f"Attempting to get SID for user {known_username}", self.target.samba_config)
+            result = run(command, f"Attempting to get SID for user {known_username}", self.target.samba_config, error_filter=False)
             sid_string = result.retmsg
 
-            #FIXME: Use nt_status_error_filter?
+            #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
             if "NT_STATUS_ACCESS_DENIED" in sid_string or "NT_STATUS_NONE_MAPPED" in sid_string:
                 continue
 
@@ -1441,9 +1412,10 @@ class RidCycling():
                     if result not in sids:
                         sids.append(result)
 
+        #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
         # Try to get SID list via lsaenumsid
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "lsaenumsid", self.target.host]
-        result = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config)
+        result = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config, error_filter=False)
 
         if "NT_STATUS_ACCESS_DENIED" not in result.retmsg:
             for pattern in sid_patterns_list:
@@ -1463,9 +1435,10 @@ class RidCycling():
         for rid_range in rid_ranges:
             (start_rid, end_rid) = rid_range
 
+            #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
             for rid in range(start_rid, end_rid+1):
                 command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", self.target.host, "-c", f"lookupsids {sid}-{rid}"]
-                result = run(command, "RID Cycling", self.target.samba_config)
+                result = run(command, "RID Cycling", self.target.samba_config, error_filter=False)
 
                 # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
                 match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", result.retmsg)
@@ -1542,10 +1515,6 @@ class EnumShares():
         if not result.retval:
             return Result(None, f"Could not list shares: {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not list shares: {nt_status_error}")
-
         shares = {}
         match_list = re.findall(r"\n\s*([\S]+?)\s+(?:Disk|IPC|Printer)", result.retmsg, re.IGNORECASE)
         if match_list:
@@ -1569,7 +1538,7 @@ class EnumShares():
         In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
         '''
         command = ["smbclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", f"//{self.target.host}/{share}", "-c", "dir"]
-        result = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config)
+        result = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config, error_filter=False)
 
         if "NT_STATUS_BAD_NETWORK_NAME" in result.retmsg:
             return Result(None, "Share doesn't exist")
@@ -1584,13 +1553,13 @@ class EnumShares():
             return Result({"mapping":"ok", "listing":"not supported"}, "Mapping: OK, Listing: NOT SUPPORTED")
 
         if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in result.retmsg:
-            return Result(None, "Could not check share: NT_STATUS_OBJECT_NAME_NOT_FOUND")
+            return Result(None, "Could not check share: STATUS_OBJECT_NAME_NOT_FOUND")
 
         if "NT_STATUS_INVALID_PARAMETER" in result.retmsg:
-            return Result(None, "Could not check share: NT_STATUS_INVALID_PARAMETER")
+            return Result(None, "Could not check share: STATUS_INVALID_PARAMETER")
 
         if "NT_STATUS_WRONG_PASSWORD" in result.retmsg:
-            return Result(None, "Could not check share: NT_STATUS_WRONG_PASSWORD")
+            return Result(None, "Could not check share: STATUS_WRONG_PASSWORD")
 
         if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", result.retmsg) or re.search(r".*blocks\sof\ssize.*blocks\savailable.*", result.retmsg):
             return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
@@ -1871,10 +1840,6 @@ class EnumPrinters():
         if not result.retval:
             return Result(None, f"Could not get printer info via 'enumprinters': {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not get printer info via 'enumprinters': {nt_status_error}")
-
         #FIXME: Not 100% about this one, is the spooler propably not running?
         if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in result.retmsg:
             return Result("", "No printers available")
@@ -1930,10 +1895,6 @@ class EnumServices():
         if not result.retval:
             return Result(None, f"Could not get services via 'net rpc service list': {result.retmsg}")
 
-        nt_status_error = nt_status_error_filter(result.retmsg)
-        if nt_status_error:
-            return Result(None, f"Could not get services via 'net rpc service list': {nt_status_error}")
-
         match_list = re.findall(r"([^\s]*)\s*\"(.*)\"", result.retmsg, re.MULTILINE)
         if not match_list:
             return Result(None, "Could not parse result of 'net rpc service list' command, please open a GitHub issue")
@@ -1972,7 +1933,7 @@ def prepare_rid_ranges(rid_ranges):
 
     return rid_ranges_list
 
-def run(command, description="", samba_config=None):
+def run(command, description="", samba_config=None, error_filter=True):
     '''
     Runs a samba client command (net, nmblookup, smbclient or rpcclient) and does some basic output filtering.
     The samba_config parameter allows to pass in a custom samba config, this allows to modify the behaviour of
@@ -1999,6 +1960,12 @@ def run(command, description="", samba_config=None):
 
     if retval == 1 and not output:
         return Result(False, "empty response")
+
+    if error_filter:
+        nt_status_error = nt_status_error_filter(output)
+        if nt_status_error:
+            return Result(False, nt_status_error)
+
     return Result(True, output)
 
 
