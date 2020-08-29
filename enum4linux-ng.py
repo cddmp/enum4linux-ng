@@ -1642,9 +1642,10 @@ class EnumShares():
         Takes a share as first argument and checks whether the share is accessible.
         The function returns a dictionary with the keys "mapping" and "listing".
         "mapping" can be either OK or DENIED. OK means the share exists and is accessible.
-        "listing" can bei either OK, DENIED, N/A or NOT SUPPORTED. N/A means directory listing
-        is not allowed, while NOT SUPPORTED means the share does not support listing at all.
-        This is the case for shares like IPC$ which is used for remote procedure calls.
+        "listing" can bei either OK, DENIED, N/A, NOT SUPPORTED or WRONG PASSWORD.
+        N/A means directory listing is not allowed, while NOT SUPPORTED means the share does
+        not support listing at all. This is the case for shares like IPC$ which is used for
+        remote procedure calls.
 
         In order to enumerate access permissions, smbclient is used with the "dir" command.
         In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
@@ -1658,6 +1659,9 @@ class EnumShares():
         if "NT_STATUS_ACCESS_DENIED listing" in result.retmsg:
             return Result({"mapping":"ok", "listing":"denied"}, "Mapping: OK, Listing: DENIED")
 
+        if "NT_STATUS_WRONG_PASSWORD" in result.retmsg:
+            return Result({"mapping":"ok", "listing":"wrong password"}, "Mapping: OK, Listing: WRONG PASSWORD")
+
         if "tree connect failed: NT_STATUS_ACCESS_DENIED" in result.retmsg:
             return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
 
@@ -1669,9 +1673,6 @@ class EnumShares():
 
         if "NT_STATUS_INVALID_PARAMETER" in result.retmsg:
             return Result(None, "Could not check share: STATUS_INVALID_PARAMETER")
-
-        if "NT_STATUS_WRONG_PASSWORD" in result.retmsg:
-            return Result(None, "Could not check share: STATUS_WRONG_PASSWORD")
 
         if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", result.retmsg) or re.search(r".*blocks\sof\ssize.*blocks\savailable.*", result.retmsg):
             return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
