@@ -2029,7 +2029,7 @@ class Enumerator():
             creds = Credentials(args.user, args.pw)
             target = Target(args.host, args.workgroup, timeout=args.timeout)
         except:
-            raise Exception(f"Target {args.host} is not valid or could not be resolved.")
+            raise Exception(f"Target {args.host} is not a valid IP or could not be resolved.")
 
         # Add target host and creds to output, so that it will end up in the JSON/YAML
         output.update(target.as_dict())
@@ -2236,8 +2236,9 @@ class Enumerator():
 
     def __del__(self):
         # Delete temporary samba config
-        if self.target.samba_config is not None:
-            del self.target.samba_config
+        if hasattr(self, 'target'):
+            if self.target.samba_config is not None:
+                del self.target.samba_config
 ###
 
 def run(command, description="", samba_config=None, error_filter=True):
