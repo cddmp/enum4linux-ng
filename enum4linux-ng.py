@@ -100,7 +100,7 @@ import yaml
 #    You should have received a copy of the GNU General Public Licens
 #    along with this program; if not, write to the Free Softwar
 #    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA
-CONST_NBT_INFO = [
+NBT_INFO = [
     ["__MSBROWSE__", "01", False, "Master Browser"],
     ["INet~Services", "1C", False, "IIS"],
     ["IS~", "00", True, "IIS"],
@@ -139,7 +139,7 @@ CONST_NBT_INFO = [
 ]
 
 # ACB (Account Control Block) contains flags an SAM account
-CONST_ACB_DICT = {
+ACB_DICT = {
         0x00000001: "Account Disabled",
         0x00000200: "Password not expired",
         0x00000400: "Account locked out",
@@ -151,7 +151,7 @@ CONST_ACB_DICT = {
         }
 
 # Source: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-samr/d275ab19-10b0-40e0-94bb-45b7fc130025
-CONST_DOMAIN_FIELDS = {
+DOMAIN_FIELDS = {
         0x00000001: "DOMAIN_PASSWORD_COMPLEX",
         0x00000002: "DOMAIN_PASSWORD_NO_ANON_CHANGE",
         0x00000004: "DOMAIN_PASSWORD_NO_CLEAR_CHANGE",
@@ -161,7 +161,7 @@ CONST_DOMAIN_FIELDS = {
         }
 
 # Source: https://docs.microsoft.com/en-us/windows/win32/sysinfo/operating-system-version
-CONST_OS_VERSIONS = {
+OS_VERSIONS = {
         "10.0": "Windows 10, Windows Server 2019, Windows Server 2016",
         "6.3": "Windows 8.1, Windows Server 2012 R2",
         "6.2": "Windows 8, Windows Server 2012",
@@ -176,13 +176,16 @@ CONST_OS_VERSIONS = {
 
 # Filter for various samba client setup related error messages including bug
 # https://bugzilla.samba.org/show_bug.cgi?id=13925
-CONST_SAMBA_CLIENT_ERROR_FILTER = [
+SAMBA_CLIENT_ERRORS = [
         "Unable to initialize messaging context",
         "WARNING: no network interfaces found",
         "Can't load /etc/samba/smb.conf - run testparm to debug it"
     ]
 
-CONST_NT_STATUS_COMMON_ERRORS = [
+# This list will be used by the function nt_status_error_filter() which is typically
+# called after running a Samba client command (see run()). The idea is to filter out
+# common errors.
+NT_STATUS_COMMON_ERRORS = [
         "STATUS_ACCESS_DENIED",
         "STATUS_LOGON_FAILURE",
         "STATUS_IO_TIMEOUT",
@@ -192,10 +195,47 @@ CONST_NT_STATUS_COMMON_ERRORS = [
         "WERR_ACCESS_DENIED"
     ]
 
-CONST_DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
-CONST_RID_RANGES = "500-550,1000-1050"
-CONST_KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
-CONST_TIMEOUT = 5
+# Mapping from errno to string for socket errors we often come across
+SOCKET_ERRORS = {
+        11: "timed out",
+        110: "timed out",
+        111: "connection refused",
+        113: "no route to host"
+        }
+
+# This is needed for the ServiceScan class
+SERVICE_LDAP = "LDAP"
+SERVICE_LDAPS = "LDAPS"
+SERVICE_SMB = "SMB"
+SERVICE_SMB_NETBIOS = "SMB over NetBIOS"
+SERVICES = {
+        SERVICE_LDAP: 389,
+        SERVICE_LDAPS: 686,
+        SERVICE_SMB: 445,
+        SERVICE_SMB_NETBIOS: 139
+        }
+
+# The current list of module names
+ENUM_LDAP_DOMAIN_INFO = "enum_ldap_domain_info"
+ENUM_NETBIOS = "enum_netbios"
+ENUM_SMB = "enum_smb"
+ENUM_SESSIONS = "enum_sessions"
+ENUM_LSAQUERY_DOMAIN_INFO = "enum_lsaquery_domain_info"
+ENUM_USERS_RPC = "enum_users_rpc"
+ENUM_GROUPS_RPC = "enum_groups_rpc"
+ENUM_SERVICES = "services_check"
+ENUM_SHARES = "enum_shares"
+ENUM_SERVICES = "enum_services"
+ENUM_POLICY = "enum_policy"
+ENUM_PRINTERS = "enum_printers"
+ENUM_OS_INFO = "enum_os_info"
+RID_CYCLING = "rid_cycling"
+BRUTE_FORCE_SHARES = "brute_force_shares"
+
+DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
+RID_RANGES = "500-550,1000-1050"
+KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
+TIMEOUT = 5
 
 # global_verbose is the only global variable which should be written to
 global_verbose = False
@@ -219,18 +259,25 @@ class Result:
 
 class Target:
     '''
-    Target encapsulates target information like host name or ip, workgroup name, port number
-    or whether Transport Layer Security (TLS) is used or not.
+    Target encapsulates various target information. The class should only be instantiated once and
+    passed during the enumeration to the various modules. This allows to modify/update target information
+    during enumeration.
     '''
-    def __init__(self, host, workgroup, port=None, timeout=None, tls=None, samba_config=None):
+    def __init__(self, host, workgroup, port=None, timeout=None, tls=None, samba_config=None, sessions=False):
         self.host = host
         self.port = port
         self.workgroup = workgroup
         self.timeout = timeout
         self.tls = tls
         self.samba_config = samba_config
-
+        self.sessions = sessions
         self.workgroup_from_long_domain = False
+        self.ip_version = None
+        self.smb_ports = []
+        self.ldap_ports = []
+
+        if not self.valid_host(host):
+            raise Exception()
 
     def update_workgroup(self, workgroup, long_domain=False):
         # Occassionally lsaquery would return a slightly different domain name than LDAP, e.g.
@@ -245,6 +292,19 @@ class Target:
             self.workgroup_from_long_domain = True
         else:
             self.workgroup = workgroup
+
+    def valid_host(self, host):
+        try:
+            result = socket.getaddrinfo(host, None)
+            if result[0][0] == socket.AF_INET6:
+                self.ip_version = 6
+                return True
+            if result[0][0] == socket.AF_INET:
+                self.ip_version = 4
+                return True
+        except Exception as e:
+            pass
+        return False
 
     def as_dict(self):
         return {'target':{'host':self.host, 'workgroup':self.workgroup}}
@@ -266,7 +326,7 @@ class SambaConfig:
     '''
     Allows to create custom Samba configurations which can be passed via path to the various Samba client tools.
     This is allows to enable non-default features for the Samba tools like SMBv1 which is disabled in recent
-    Samba client tool versions by default.
+    Samba client tools versions by default.
     '''
     def __init__(self, entries):
         config = '\n'.join(entries)
@@ -336,6 +396,65 @@ class Output:
     def as_dict(self):
         return self.out_dict
 
+### Service Scans
+
+class ServiceScan():
+    def __init__(self, target, check_list):
+        self.target = target
+        self.check_list = check_list
+        self.services = OrderedDict({})
+
+    def run(self):
+        module_name = ENUM_SERVICES
+        output = {}
+
+        print_heading(f"Service Scan on {self.target.host}")
+        for service, port in SERVICES.items():
+            if service not in self.check_list:
+                continue
+
+            print_info(f"Checking {service} (timeout: {self.target.timeout}s)")
+            result = self.check_accessible(service, port)
+            if result.retval:
+                print_success(result.retmsg)
+            else:
+                output = process_error(result.retmsg, ["services"], module_name, output)
+
+            self.services[service] = {"port": port, "accessible": result.retval}
+
+        output["services"] = self.services
+
+        return output
+
+    def check_accessible(self, service, port):
+        if self.target.ip_version == 6:
+            address_family = socket.AF_INET6
+        elif self.target.ip_version == 4:
+            address_family = socket.AF_INET
+
+        try:
+            sock = socket.socket(address_family, socket.SOCK_STREAM)
+            sock.settimeout(self.target.timeout)
+            result = sock.connect_ex((self.target.host, port))
+            if result == 0:
+                return Result(True, f"{service} is accessible on {port}/tcp")
+            return Result(False, f"Could not connect to {service} on {port}/tcp: {SOCKET_ERRORS[result]}")
+        except:
+            return Result(False, f"Could not connect to {service} on {port}/tcp")
+
+    def get_accessible_services(self):
+        accessible = []
+        for service, entry in self.services.items():
+            if entry["accessible"] is True:
+                accessible.append(service)
+        return accessible
+
+    def get_accessible_ports_by_pattern(self, pattern):
+        accessible = []
+        for service, entry in self.services.items():
+            if pattern in service and entry["accessible"] is True:
+                accessible.append(self.services[service]["port"])
+        return accessible
 
 ### NetBIOS Enumeration
 
@@ -347,8 +466,8 @@ class EnumNetbios():
         '''
         Run NetBIOS module which collects Netbios names and the workgroup.
         '''
-        module_name = "enum_netbios"
-        print_heading(f"NetBIOS names and Workgroup for {self.target.host}")
+        module_name = ENUM_NETBIOS
+        print_heading(f"NetBIOS Names and Workgroup for {self.target.host}")
         output = {"workgroup":None, "nmblookup":None}
 
         nmblookup = self.nmblookup()
@@ -413,7 +532,7 @@ class EnumNetbios():
                 line_val = match.group(1)
                 line_code = match.group(2).upper()
                 line_group = False if match.group(3) else True
-                for entry in CONST_NBT_INFO:
+                for entry in NBT_INFO:
                     pattern, code, group, desc = entry
                     if pattern:
                         if pattern in line_val and line_code == code and line_group == group:
@@ -427,7 +546,6 @@ class EnumNetbios():
                 output.append(line)
         return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
 
-
 ### SMB checks
 
 class EnumSmb():
@@ -439,11 +557,11 @@ class EnumSmb():
         '''
         Run SMB module which checks whether only SMBv1 is supported.
         '''
-        module_name = "enum_smb"
-        print_heading(f"SMB dialect check on {self.target.host}")
+        module_name = ENUM_SMB
+        print_heading(f"SMB Dialect Check on {self.target.host}")
         output = {}
 
-        for port in [139, 445]:
+        for port in self.target.smb_ports:
             print_info(f"Check for legacy SMBv1 on {port}/tcp (timeout: {self.target.timeout}s)")
             self.target.port = port
             result = self.check_smb1()
@@ -483,7 +601,7 @@ class EnumSmb():
             smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             dialect = smb_conn.getDialect()
             smb_conn.close()
-            if dialect == smbconnection.SMB_DIALECT:
+            if dialect == SMB_DIALECT:
                 return Result(True, "Server supports only SMBv1")
             return Result(False, "Server supports dialects higher SMBv1")
 
@@ -498,9 +616,8 @@ class EnumSmb():
             if isinstance(e, smb.SessionError) or isinstance(e, smb3.SessionError):
                 if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED:
                     return Result(False, "Server supports dialects higher SMBv1")
-                return Result(None, f"SMB connection error: session failed")
+                return Result(None, "SMB connection error: session failed")
             return Result(None, f"SMB connection error on port {self.target.port}/tcp")
-
 
 ### Session Checks
 
@@ -513,8 +630,8 @@ class EnumSessions():
         '''
         Run session check module which tests for user and null sessions.
         '''
-        module_name = "enum_sessions"
-        print_heading(f"RPC session checks on {self.target.host}")
+        module_name = ENUM_SESSIONS
+        print_heading(f"RPC Session Check on {self.target.host}")
         output = {"sessions_possible":False,
                   "null_session_possible":False,
                   "user_session_possible":False,
@@ -599,7 +716,6 @@ class EnumSessions():
             return Result(True, f"Server allows session using username '{user}', password '{pw}'")
         return Result(False, f"Server doesn't allow session using username '{user}', password '{pw}'")
 
-
 ### Domain Information Enumeration via LDAP
 
 class EnumLdapDomainInfo():
@@ -612,16 +728,16 @@ class EnumLdapDomainInfo():
         child DC. Also tries to fetch long domain name. The information are get from
         the LDAP RootDSE.
         '''
-        module_name = "enum_ldap_domain_info"
+        module_name = ENUM_LDAP_DOMAIN_INFO
         print_heading(f"Domain Information via LDAP for {self.target.host}")
         output = {"is_parent_dc":None,
                   "is_child_dc":None,
                   "long_domain":None}
 
         for with_tls in [False, True]:
-            if with_tls:
+            if with_tls and SERVICES[SERVICE_LDAPS] in self.target.ldap_ports:
                 print_info(f'Trying LDAPS (timeout: {self.target.timeout}s)')
-            else:
+            elif not with_tls and SERVICES[SERVICE_LDAP] in self.target.ldap_ports:
                 print_info(f'Trying LDAP (timeout: {self.target.timeout}s)')
             self.target.tls = with_tls
             namingcontexts = self.get_namingcontexts()
@@ -710,7 +826,6 @@ class EnumLdapDomainInfo():
             return Result(True, "Appears to be root/parent DC")
         return Result(False, "Appears to be child DC")
 
-
 ### Domain Information Enumeration via lsaquery
 
 class EnumLsaqueryDomainInfo():
@@ -723,8 +838,8 @@ class EnumLsaqueryDomainInfo():
         Run module lsaquery which tries to get domain information like
         the domain/workgroup name, domain SID and the membership type.
         '''
-        module_name = "enum_lsaquery_domain_info"
-        print_heading(f"Domain information via RPC for {self.target.host}")
+        module_name = ENUM_LSAQUERY_DOMAIN_INFO
+        print_heading(f"Domain Information via RPC for {self.target.host}")
         output = {"workgroup":None,
                   "domain_sid":None,
                   "member_of":None}
@@ -817,7 +932,6 @@ class EnumLsaqueryDomainInfo():
             return Result("domain", "Host is part of a domain (not a workgroup)")
         return Result(False, "Could not determine if host is part of domain or part of a workgroup")
 
-
 ### OS Information Enumeration
 
 class EnumOsInfo():
@@ -829,8 +943,8 @@ class EnumOsInfo():
         '''
         Run module srvinfo which collects various OS information.
         '''
-        module_name = "enum_os_info"
-        print_heading(f"OS information via RPC on {self.target.host}")
+        module_name = ENUM_OS_INFO
+        print_heading(f"OS Information via RPC on {self.target.host}")
         output = {"os_info":None}
 
         srvinfo = self.srvinfo()
@@ -904,11 +1018,10 @@ class EnumOsInfo():
             if match:
                 return  f"Linux/Unix ({match.group(1)})"
 
-        if os_version in CONST_OS_VERSIONS:
-            return CONST_OS_VERSIONS[os_version]
+        if os_version in OS_VERSIONS:
+            return OS_VERSIONS[os_version]
 
         return "unknown"
-
 
 ### Users Enumeration via RPC
 
@@ -922,7 +1035,7 @@ class EnumUsersRpc():
         '''
         Run module enum users.
         '''
-        module_name = "enum_users_rpc"
+        module_name = ENUM_USERS_RPC
         print_heading(f"Users via RPC on {self.target.host}")
         output = {}
 
@@ -1085,15 +1198,14 @@ class EnumUsersRpc():
                     details[line] = ""
 
             if "acb_info" in details and valid_hex(details["acb_info"]):
-                for key in CONST_ACB_DICT.keys():
+                for key in ACB_DICT.keys():
                     if int(details["acb_info"], 16) & key:
-                        details[CONST_ACB_DICT[key]] = True
+                        details[ACB_DICT[key]] = True
                     else:
-                        details[CONST_ACB_DICT[key]] = False
+                        details[ACB_DICT[key]] = False
 
             return Result(details, f"Found details for user '{name}' (RID {rid})")
         return Result(None, f"Could not find details for user '{name}' (RID {rid})")
-
 
 ### Groups Enumeration via RPC
 
@@ -1108,7 +1220,7 @@ class EnumGroupsRpc():
         '''
         Run module enum groups.
         '''
-        module_name = "enum_groups_rpc"
+        module_name = ENUM_GROUPS_RPC
         print_heading(f"Groups via RPC on {self.target.host}")
         output = {}
         groups = None
@@ -1276,7 +1388,6 @@ class EnumGroupsRpc():
             return Result(details, f"Found details for {grouptype} group '{groupname}' (RID {rid})")
         return Result(None, f"Could not find details for {grouptype} group '{groupname}' (RID {rid})")
 
-
 ### RID Cycling
 
 class RidCycleParams:
@@ -1314,8 +1425,8 @@ class RidCycling():
         '''
         Run module RID cycling.
         '''
-        module_name = "rid_cycling"
-        print_heading(f"Users, Groups and Machines on {self.target.host} via RID cycling")
+        module_name = RID_CYCLING
+        print_heading(f"Users, Groups and Machines on {self.target.host} via RID Cycling")
         output = self.cycle_params.enumerated_input
 
         # Try to enumerate SIDs first, if we don't have the domain SID already
@@ -1464,7 +1575,6 @@ class RidCycling():
                     elif "(9)" in sid_and_user:
                         yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
 
-
 ### Shares Enumeration
 
 class EnumShares():
@@ -1476,7 +1586,7 @@ class EnumShares():
         '''
         Run module enum shares.
         '''
-        module_name = "enum_shares"
+        module_name = ENUM_SHARES
         print_heading(f"Shares via RPC on {self.target.host}")
         output = {}
         shares = None
@@ -1565,7 +1675,6 @@ class EnumShares():
 
         return Result(None, "Could not parse result of smbclient command, please open a GitHub issue")
 
-
 ### Share Brute-Force
 
 class ShareBruteParams:
@@ -1594,8 +1703,8 @@ class BruteForceShares():
         '''
         Run module bruteforce shares.
         '''
-        module_name = "brute_force_shares"
-        print_heading(f"Share bruteforcing on {self.target.host}")
+        module_name = BRUTE_FORCE_SHARES
+        print_heading(f"Share Bruteforcing on {self.target.host}")
         output = self.brute_params.enumerated_input
 
         found_count = 0
@@ -1626,7 +1735,6 @@ class BruteForceShares():
 
         return output
 
-
 ### Policy Enumeration
 
 class EnumPolicy():
@@ -1638,11 +1746,11 @@ class EnumPolicy():
         '''
         Run module enum policy.
         '''
-        module_name = "enum_policy"
+        module_name = ENUM_POLICY
         print_heading(f"Policies via RPC for {self.target.host}")
         output = {}
 
-        for port in [139, 445]:
+        for port in self.target.smb_ports:
             print_info(f"Trying port {port}/tcp (timeout: {self.target.timeout}s)")
             self.target.port = port
             enum = self.enum()
@@ -1685,11 +1793,11 @@ class EnumPolicy():
         policy["domain_password_information"]["max_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
         policy["domain_password_information"]["pw_properties"] = []
         pw_prop = result['Buffer']['Password']['PasswordProperties']
-        for bitmask in CONST_DOMAIN_FIELDS.keys():
+        for bitmask in DOMAIN_FIELDS.keys():
             if pw_prop & bitmask == bitmask:
-                policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:True})
+                policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:True})
             else:
-                policy["domain_password_information"]["pw_properties"].append({CONST_DOMAIN_FIELDS[bitmask]:False})
+                policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:False})
 
         # Domain lockout
         try:
@@ -1803,7 +1911,6 @@ class EnumPolicy():
             time += f"{minutes} minute"
         return time
 
-
 ### Printer Enumeration
 
 class EnumPrinters():
@@ -1815,7 +1922,7 @@ class EnumPrinters():
         '''
         Run module enum printers.
         '''
-        module_name = "enum_printers"
+        module_name = ENUM_PRINTERS
         print_heading(f"Printers via RPC for {self.target.host}")
         output = {}
 
@@ -1858,7 +1965,6 @@ class EnumPrinters():
 
         return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yaml.dump(printers).rstrip()}")
 
-
 ### Services Enumeration
 
 class EnumServices():
@@ -1870,7 +1976,7 @@ class EnumServices():
         '''
         Run module enum services.
         '''
-        module_name = "enum_services"
+        module_name = ENUM_SERVICES
         print_heading(f"Services via RPC on {self.target.host}")
         output = {'services':None}
 
@@ -1905,32 +2011,234 @@ class EnumServices():
 
         return Result(services, f"Found {len(services.keys())} service(s):\n{yaml.dump(services).rstrip()}")
 
+### Enumerator
 
-### Misc Functions
+class Enumerator():
+    def __init__(self, args):
 
-def prepare_rid_ranges(rid_ranges):
-    '''
-    Takes a string containing muliple RID ranges and returns a list of ranges as tuples.
-    '''
-    rid_ranges_list = []
-
-    for rid_range in rid_ranges.split(','):
-        if rid_range.isdigit():
-            start_rid = rid_range
-            end_rid = rid_range
+        # Init output files
+        if args.out_json_file:
+            output = Output(args.out_json_file, "json")
+        elif args.out_yaml_file:
+            output = Output(args.out_yaml_file, "yaml")
         else:
-            [start_rid, end_rid] = rid_range.split("-")
+            output = Output()
 
-        start_rid = int(start_rid)
-        end_rid = int(end_rid)
+        # Init target and creds
+        try:
+            creds = Credentials(args.user, args.pw)
+            target = Target(args.host, args.workgroup, timeout=args.timeout)
+        except:
+            raise Exception(f"Target {args.host} is not valid or could not be resolved.")
 
-        # Reverse if neccessary
-        if start_rid > end_rid:
-            start_rid, end_rid = end_rid, start_rid
+        # Add target host and creds to output, so that it will end up in the JSON/YAML
+        output.update(target.as_dict())
+        output.update(creds.as_dict())
 
-        rid_ranges_list.append((start_rid, end_rid))
+        self.args = args
+        self.output = output
+        self.target = target
+        self.creds = creds
+        self.cycle_params = None
+        self.share_brute_params = None
 
-    return rid_ranges_list
+    def run(self):
+        # RID Cycling - init parameters
+        if self.args.R:
+            rid_ranges = self.prepare_rid_ranges()
+            self.cycle_params = RidCycleParams(rid_ranges, self.args.users)
+
+        # Shares Brute Force - init parameters
+        if self.args.shares_file:
+            self.share_brute_params = ShareBruteParams(self.args.shares_file)
+
+        print_heading("Target Information")
+        print_info(f"Target ........... {self.target.host}")
+        print_info(f"Username ......... '{self.creds.user}'")
+        print_info(f"Random Username .. '{self.creds.random_user}'")
+        print_info(f"Password ......... '{self.creds.pw}'")
+        if self.args.R:
+            print_info(f"RID Range(s) ..... {self.args.ranges}")
+            print_info(f"Known Usernames .. '{self.args.users}'")
+
+        # The enumeration starts with a service scan. Currently this scans for
+        # SMB and LDAP, simple TCP connect scan is used for that. From the result
+        # of the scan and the arguments passed in by the user, a list of modules
+        # is generated. These modules will then be run.
+        services = self.service_scan()
+        self.target.services = services
+        modules = self.get_modules(services)
+        self.run_modules(modules)
+
+    def service_scan(self):
+        # By default we scan for 445/tcp and 139/tcp (SMB).
+        # LDAP will be added if the user requested any option which requires LDAP
+        # like -L or -A.
+        check_list = [SERVICE_SMB, SERVICE_SMB_NETBIOS]
+        if self.args.L:
+            check_list += [SERVICE_LDAP, SERVICE_LDAPS]
+
+        check = ServiceScan(self.target, check_list)
+        result = check.run()
+        self.output.update(result)
+        self.target.smb_ports = check.get_accessible_ports_by_pattern("SMB")
+        self.target.ldap_ports = check.get_accessible_ports_by_pattern("LDAP")
+        return check.get_accessible_services()
+
+    def get_modules(self, services, sessions=True):
+        modules = []
+        if self.args.N:
+            modules.append(ENUM_NETBIOS)
+
+        if SERVICE_LDAP in services or SERVICE_LDAPS in services:
+            if self.args.L:
+                modules.append(ENUM_LDAP_DOMAIN_INFO)
+
+        if SERVICE_SMB in services or SERVICE_SMB_NETBIOS in services:
+            modules.append(ENUM_SMB)
+            modules.append(ENUM_SESSIONS)
+
+            if sessions:
+                modules.append(ENUM_LSAQUERY_DOMAIN_INFO)
+                if self.args.I:
+                    modules.append(ENUM_OS_INFO)
+                if self.args.U:
+                    modules.append(ENUM_USERS_RPC)
+                if self.args.G:
+                    modules.append(ENUM_GROUPS_RPC)
+                if self.args.Gm:
+                    modules.append(ENUM_GROUPS_RPC)
+                if self.args.R:
+                    modules.append(RID_CYCLING)
+                if self.args.S:
+                    modules.append(ENUM_SHARES)
+                if self.args.shares_file:
+                    modules.append(BRUTE_FORCE_SHARES)
+                if self.args.P:
+                    modules.append(ENUM_POLICY)
+                if self.args.I:
+                    modules.append(ENUM_PRINTERS)
+                if self.args.C:
+                    modules.append(ENUM_SERVICES)
+
+        return modules
+
+    def run_modules(self, modules):
+        # Checks if host is a parent/child domain controller, try to get long domain name
+        if ENUM_LDAP_DOMAIN_INFO in modules:
+            result = EnumLdapDomainInfo(self.target).run()
+            self.output.update(result)
+            if not self.target.workgroup and result["long_domain"]:
+                self.target.update_workgroup(result["long_domain"], True)
+
+        # Try to retrieve workstation and nbtstat information
+        if ENUM_NETBIOS in modules:
+            result = EnumNetbios(self.target).run()
+            self.output.update(result)
+            if not self.target.workgroup and result["workgroup"]:
+                self.target.update_workgroup(result["workgroup"])
+
+        # Enumerate supported SMB versions
+        if ENUM_SMB in modules:
+            result = EnumSmb(self.target, self.args.d).run()
+            self.output.update(result)
+
+        # Check for user credential and null sessions
+        if ENUM_SESSIONS in modules:
+            result = EnumSessions(self.target, self.creds).run()
+            self.output.update(result)
+            self.target.sessions = self.output.as_dict()['sessions_possible']
+
+        # If sessions are not possible, we regenerate the list of modules again.
+        # This will only leave those modules in, which don't require authentication
+        # (none at the moment, therefore the tool would finish enumeration).
+        if not self.target.sessions:
+            modules = self.get_modules(self.target.services, self.target.sessions)
+
+        # Try to get domain name and sid via lsaquery
+        if ENUM_LSAQUERY_DOMAIN_INFO in modules:
+            result = EnumLsaqueryDomainInfo(self.target, self.creds).run()
+            self.output.update(result)
+            if not self.target.workgroup and result["workgroup"]:
+                self.target.update_workgroup(result["workgroup"])
+
+        # Get OS information like os version, server type string...
+        if ENUM_OS_INFO in modules:
+            result = EnumOsInfo(self.target, self.creds).run()
+            self.output.update(result)
+
+        # Enum users
+        if ENUM_USERS_RPC in modules:
+            result = EnumUsersRpc(self.target, self.creds, self.args.d).run()
+            self.output.update(result)
+
+        # Enum groups
+        if ENUM_GROUPS_RPC in modules:
+            result = EnumGroupsRpc(self.target, self.creds, self.args.Gm, self.args.d).run()
+            self.output.update(result)
+
+        # Enum services
+        if ENUM_SERVICES in modules:
+            result = EnumServices(self.target, self.creds).run()
+            self.output.update(result)
+
+        # Enum shares
+        if ENUM_SHARES in modules:
+            result = EnumShares(self.target, self.creds).run()
+            self.output.update(result)
+
+        # Enum password policy
+        if ENUM_POLICY in modules:
+            result = EnumPolicy(self.target, self.creds).run()
+            self.output.update(result)
+
+        # Enum printers
+        if ENUM_PRINTERS in modules:
+            result = EnumPrinters(self.target, self.creds).run()
+            self.output.update(result)
+
+        # RID Cycling (= bruteforce users, groups and machines)
+        if RID_CYCLING in modules:
+            self.cycle_params.set_enumerated_input(self.output.as_dict())
+            result = RidCycling(self.cycle_params, self.target, self.creds, self.args.d).run()
+            self.output.update(result)
+
+        # Brute force shares
+        if BRUTE_FORCE_SHARES in modules:
+            self.share_brute_params.set_enumerated_input(self.output.as_dict())
+            result = BruteForceShares(self.share_brute_params, self.target, self.creds).run()
+            self.output.update(result)
+
+    def prepare_rid_ranges(self):
+        '''
+        Takes a string containing muliple RID ranges and returns a list of ranges as tuples.
+        '''
+        rid_ranges = self.args.ranges
+        rid_ranges_list = []
+
+        for rid_range in rid_ranges.split(','):
+            if rid_range.isdigit():
+                start_rid = rid_range
+                end_rid = rid_range
+            else:
+                [start_rid, end_rid] = rid_range.split("-")
+
+            start_rid = int(start_rid)
+            end_rid = int(end_rid)
+
+            # Reverse if neccessary
+            if start_rid > end_rid:
+                start_rid, end_rid = end_rid, start_rid
+
+            rid_ranges_list.append((start_rid, end_rid))
+
+        return rid_ranges_list
+
+    def __del__(self):
+        # Delete temporary samba config
+        if self.target.samba_config is not None:
+            del self.target.samba_config
+###
 
 def run(command, description="", samba_config=None, error_filter=True):
     '''
@@ -1953,7 +2261,7 @@ def run(command, description="", samba_config=None, error_filter=True):
 
     output = output.decode()
     for line in output.splitlines(True):
-        if any(entry in line for entry in CONST_SAMBA_CLIENT_ERROR_FILTER):
+        if any(entry in line for entry in SAMBA_CLIENT_ERRORS):
             output = output.replace(line, "")
     output = output.rstrip('\n')
 
@@ -1966,7 +2274,6 @@ def run(command, description="", samba_config=None, error_filter=True):
             return Result(False, nt_status_error)
 
     return Result(True, output)
-
 
 ### Validation Functions
 
@@ -2013,7 +2320,7 @@ def valid_shares_file(shares_file):
     except:
         return Result(False, f"Could not open shares file {shares_file}")
     if fault_shares:
-        return Result(False, f"These shares contain illegal characters:\n{NL.join(fault_shares)}")
+        return Result(False, f"Shares with illegal characters found in {shares_file}:\n{NL.join(fault_shares)}")
     return Result(True, "")
 
 def valid_share(share):
@@ -2038,13 +2345,10 @@ def valid_workgroup(workgroup):
         return True
     return False
 
-def valid_host(host):
-    if re.match(r"^([a-zA-Z0-9\._-]+)$", host):
-        return True
-    return False
-
-
 ### Print Functions and Error Processing
+
+def print_banner():
+    print(f"{Colors.green}ENUM4LINUX - next generation{Colors.reset}")
 
 def print_heading(text):
     output = f"|    {text}    |"
@@ -2086,7 +2390,7 @@ def process_error(msg, affected_entries, module_name, output_dict):
     return output_dict
 
 def nt_status_error_filter(msg):
-    for error in CONST_NT_STATUS_COMMON_ERRORS:
+    for error in NT_STATUS_COMMON_ERRORS:
         if error in msg:
             return error
     return ""
@@ -2100,16 +2404,20 @@ def abort(code, msg):
     print_error(msg)
     sys.exit(code)
 
-
 ### Argument Processing
 
 def check_args(argv):
+    '''
+    Takes all arguments from argv and processes them via ArgumentParser. In addition, some basic
+    validation of arguments is done.
+    '''
+
     global global_verbose
 
     parser = argparse.ArgumentParser(argv)
     parser.add_argument("host")
-    parser.add_argument("-A", action="store_true", help="Do all simple enumeration including nmblookup (-U -G -S -P -O -N -I). This option is enabled if you don't provide any other option.")
-    parser.add_argument("-As", action="store_true", help="Do all simple short enumeration without NetBIOS names lookup (-U -G -S -P -O -I)")
+    parser.add_argument("-A", action="store_true", help="Do all simple enumeration including nmblookup (-U -G -S -P -O -N -I -L). This option is enabled if you don't provide any other option.")
+    parser.add_argument("-As", action="store_true", help="Do all simple short enumeration without NetBIOS names lookup (-U -G -S -P -O -I -L)")
     parser.add_argument("-U", action="store_true", help="Get users via RPC")
     parser.add_argument("-G", action="store_true", help="Get groups via RPC")
     parser.add_argument("-Gm", action="store_true", help="Get groups with group members via RPC")
@@ -2125,13 +2433,14 @@ def check_args(argv):
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
     parser.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
     parser.add_argument("-d", action="store_true", help="Get detailed information for users and groups, applies to -U, -G and -R")
-    parser.add_argument("-k", dest="users", default=CONST_KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {CONST_KNOWN_USERNAMES}).\nUsed to get sid with "lookupsid known_username"')
-    parser.add_argument("-r", dest="ranges", default=CONST_RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {CONST_RID_RANGES})")
+    parser.add_argument("-k", dest="users", default=KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {KNOWN_USERNAMES}).\nUsed to get sid with "lookupsid known_username"')
+    parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for shares")
-    parser.add_argument("-t", dest="timeout", default=CONST_TIMEOUT, help=f"Sets connection timeout in seconds, affects -L, -P and session checks (default: {CONST_TIMEOUT}s)")
+    parser.add_argument("-t", dest="timeout", default=TIMEOUT, help=f"Sets connection timeout in seconds, affects -L, -P, service and session checks (default: {TIMEOUT}s)")
     parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file")
     parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
+
     if len(argv) == 0:
         parser.print_help()
         abort(1, "No arguments provided. Need at least argument host. Exiting.")
@@ -2139,18 +2448,27 @@ def check_args(argv):
 
     if unknown:
         parser.print_help()
-        abort(1, f"Unrecognized argument(s): {', '.join(unknown)}")
+        abort(1, f"Unrecognized argument(s): {', '.join(unknown)}. Exiting.")
 
     if args.host and (len(argv) == 1 or (len(argv) == 3 and (args.out_json_file or args.out_yaml_file))) or args.A:
         args.A = True
     else:
         args.A = False
 
+    if args.A or args.As:
+        args.G = True
+        args.I = True
+        args.L = True
+        args.O = True
+        args.P = True
+        args.S = True
+        args.U = True
+
+    if args.A:
+        args.N = True
+
     # Only global variable which meant to be modified
     global_verbose = args.verbose
-
-    if not valid_host(args.host):
-        abort(1, f"Target host '{args.host}' contains illegal character. Exiting.")
 
     # Check Workgroup
     if args.workgroup:
@@ -2178,13 +2496,12 @@ def check_args(argv):
 
     return args
 
-
 ### Dependency Checks
 
 def check_dependencies():
     missing = []
 
-    for dep in CONST_DEPS:
+    for dep in DEPS:
         if not shutil.which(dep):
             missing.append(dep)
 
@@ -2195,131 +2512,30 @@ def check_dependencies():
         print_error('     For Fedora derivates (like RHEL, CentOS), you need to install the "samba-common-tools" and "samba-client" package.')
         abort(1, "Exiting.")
 
-
 ### Run!
 
 def main():
-    print("ENUM4LINUX-NG")
-    start_time = datetime.now()
+    print_banner()
 
     # Make sure yaml can handle OrdereDicts
     yaml.add_representer(OrderedDict, lambda dumper, data: dumper.represent_mapping('tag:yaml.org,2002:map', data.items()))
+
+    # Dependency checks
     check_dependencies()
 
+    # Process arguments
     args = check_args(sys.argv[1:])
-    if args.out_json_file:
-        output = Output(args.out_json_file, "json")
-    elif args.out_yaml_file:
-        output = Output(args.out_yaml_file, "yaml")
-    else:
-        output = Output()
 
-    creds = Credentials(args.user, args.pw)
-    target = Target(args.host, args.workgroup, timeout=args.timeout)
-
-    if args.R:
-        rid_ranges = prepare_rid_ranges(args.ranges)
-        cycle_params = RidCycleParams(rid_ranges, args.users)
-
-    if args.shares_file:
-        share_brute_params = ShareBruteParams(args.shares_file)
-
-    print_heading("Target Information")
-    print_info(f"Target ........... {target.host}")
-    print_info(f"Username ......... '{creds.user}'")
-    print_info(f"Random Username .. '{creds.random_user}'")
-    print_info(f"Password ......... '{creds.pw}'")
-    print_info(f"RID Range(s) ..... {args.ranges}")
-    print_info(f"Known Usernames .. '{args.users}'")
-
-    # Add target host and creds information used during enumeration to output
-    output.update(target.as_dict())
-    output.update(creds.as_dict())
-
-    # Checks if host is a parent/child domain controller, try to get long domain name
-    if args.L or args.A or args.As:
-        result = EnumLdapDomainInfo(target).run()
-        if not target.workgroup and result["long_domain"]:
-            target.update_workgroup(result["long_domain"], True)
-        output.update(result)
-
-    # Try to retrieve workstation and nbtstat information
-    if args.N or args.A:
-        result = EnumNetbios(target).run()
-        if not target.workgroup and result["workgroup"]:
-            target.update_workgroup(result["workgroup"])
-        output.update(result)
-
-    # Enumerate supported SMB versions
-    if args.A or args.As:
-        result = EnumSmb(target, args.d).run()
-        output.update(result)
-
-    # Check for user credential and null sessions
-    result = EnumSessions(target, creds).run()
-    output.update(result)
-    if not output.as_dict()['sessions_possible']:
-        abort(1, "Aborting remainder of tests.")
-
-    # Try to get domain name and sid via lsaquery
-    result = EnumLsaqueryDomainInfo(target, creds).run()
-    if not target.workgroup and result["workgroup"]:
-        target.update_workgroup(result["workgroup"])
-    output.update(result)
-
-    # Get OS information like os version, server type string...
-    if args.O or args.A or args.As:
-        result = EnumOsInfo(target, creds).run()
-        output.update(result)
-
-    # Enum users
-    if args.U or args.A or args.As:
-        result = EnumUsersRpc(target, creds, args.d).run()
-        output.update(result)
-
-    # Enum groups
-    if args.G or args.Gm or args.A or args.As:
-        result = EnumGroupsRpc(target, creds, args.Gm, args.d).run()
-        output.update(result)
-
-    # Enum services
-    if args.C:
-        result = EnumServices(target, creds).run()
-        output.update(result)
-
-    # Enum shares
-    if args.S or args.A or args.As:
-        result = EnumShares(target, creds).run()
-        output.update(result)
-
-    # Enum password policy
-    if args.P or args.A or args.As:
-        result = EnumPolicy(target, creds).run()
-        output.update(result)
-
-    # Enum printers
-    if args.I or args.A or args.As:
-        result = EnumPrinters(target, creds).run()
-        output.update(result)
-
-    # RID Cycling (= bruteforce users, groups and machines)
-    if args.R:
-        cycle_params.set_enumerated_input(output.as_dict())
-        result = RidCycling(cycle_params, target, creds, args.d).run()
-        output.update(result)
-
-    # Brute force shares
-    if args.shares_file:
-        share_brute_params.set_enumerated_input(output.as_dict())
-        result = BruteForceShares(share_brute_params, target, creds).run()
-        output.update(result)
-
+    # Run!
+    start_time = datetime.now()
+    try:
+        enumerator = Enumerator(args)
+        enumerator.run()
+        del enumerator
+    except Exception as e:
+        abort(1, str(e))
     elapsed_time = datetime.now() - start_time
     print(f"\nCompleted after {elapsed_time.total_seconds():.2f} seconds")
-
-    # Delete temporary samba config
-    if target.samba_config is not None:
-        del target.samba_config
 
 if __name__ == "__main__":
     main()
