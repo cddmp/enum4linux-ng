@@ -710,11 +710,11 @@ class EnumSessions():
         result = run(command, "Attempting to make session", self.target.samba_config)
 
         if not result.retval:
-            return Result(None, f"Could not establish {session_type} session: {result.retmsg}")
+            return Result(False, f"Could not establish {session_type} session: {result.retmsg}")
 
         if "case_sensitive" in result.retmsg:
             return Result(True, f"Server allows session using username '{user}', password '{pw}'")
-        return Result(False, f"Server doesn't allow session using username '{user}', password '{pw}'")
+        return Result(False, f"Could not establish session using '{user}', password '{pw}'")
 
 ### Domain Information Enumeration via LDAP
 
