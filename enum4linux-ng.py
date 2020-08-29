@@ -25,9 +25,12 @@
 #         => an error happened, error messages will be printed out and will end up in the JSON/YAML with value
 #            null (see also YAML/JSON below)
 #
-#       * return value is False for 'session_possible'
+#       * return value is False for...
+#         ...'session_possible'
 #         => error, it was not possible to setup a session with the target, therefore any subsequent module runs were
 #            omitted
+#       * ...'services'-->'accessible'
+#         => error, it was not possible to setup a service connection
 #         => all other booleans are not errors
 #
 #       * return value is empty [],{},""
