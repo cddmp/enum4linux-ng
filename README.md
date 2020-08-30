@@ -18,6 +18,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 - colored console output
 - ldapsearch und polenum are natively implemented
 - support for legacy SMBv1 connections
+- IPv6 support (experimental)
 
 ## Credits
 I'd like to give credit to Mark Lowe for creating the original enum4linux.pl. In addition, I'd like to thank and give credit to Wh1t3Fox for creating polenum.
