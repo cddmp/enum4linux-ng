@@ -2104,7 +2104,7 @@ class Enumerator():
 
             if sessions:
                 modules.append(ENUM_LSAQUERY_DOMAIN_INFO)
-                if self.args.I:
+                if self.args.O:
                     modules.append(ENUM_OS_INFO)
                 if self.args.U:
                     modules.append(ENUM_USERS_RPC)
