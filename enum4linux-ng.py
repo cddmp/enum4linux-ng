@@ -1795,43 +1795,49 @@ class EnumPolicy():
         try:
             domain_passwd = samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
             result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_passwd)
-        except:
-            return Result(None, "Could not get domain password policy: RPC SamrQueryInformationDomain2() failed")
-
-        policy["domain_password_information"] = {}
-        policy["domain_password_information"]["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
-        policy["domain_password_information"]["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
-        policy["domain_password_information"]["min_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
-        policy["domain_password_information"]["max_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
-        policy["domain_password_information"]["pw_properties"] = []
-        pw_prop = result['Buffer']['Password']['PasswordProperties']
-        for bitmask in DOMAIN_FIELDS.keys():
-            if pw_prop & bitmask == bitmask:
-                policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:True})
-            else:
-                policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:False})
+            policy["domain_password_information"] = {}
+            policy["domain_password_information"]["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
+            policy["domain_password_information"]["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
+            policy["domain_password_information"]["min_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
+            policy["domain_password_information"]["max_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
+            policy["domain_password_information"]["pw_properties"] = []
+            pw_prop = result['Buffer']['Password']['PasswordProperties']
+            for bitmask in DOMAIN_FIELDS.keys():
+                if pw_prop & bitmask == bitmask:
+                    policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:True})
+                else:
+                    policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:False})
+        except Exception as e:
+            nt_status_error = nt_status_error_filter(str(e))
+            if nt_status_error:
+                return Result(None, f"Could not get domain password policy: {nt_status_error}")
+            return Result(None, "Could not get domain password policy")
 
         # Domain lockout
         try:
             domain_lockout = samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
             result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_lockout)
-        except:
-            return Result(None, "Could not get domain lockout policy: RPC SamrQueryInformationDomain2() failed")
-
-        policy["domain_lockout_information"] = {}
-        policy["domain_lockout_information"]["lockout_observation_window"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
-        policy["domain_lockout_information"]["lockout_duration"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
-        policy["domain_lockout_information"]["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
+            policy["domain_lockout_information"] = {}
+            policy["domain_lockout_information"]["lockout_observation_window"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
+            policy["domain_lockout_information"]["lockout_duration"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
+            policy["domain_lockout_information"]["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
+        except Exception as e:
+            nt_status_error = nt_status_error_filter(str(e))
+            if nt_status_error:
+                return Result(None, f"Could not get domain_lockout policy: {nt_status_error}")
+            return Result(None, "Could not get domain lockout policy")
 
         # Domain logoff
         try:
             domain_logoff = samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation
             result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
-        except:
-            return Result(None, "Could not get domain logoff policy: RPC SamrQueryInformationDomain2() failed")
-
-        policy["domain_logoff_information"] = {}
-        policy["domain_logoff_information"]["force_logoff_time"] = self.policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
+            policy["domain_logoff_information"] = {}
+            policy["domain_logoff_information"]["force_logoff_time"] = self.policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
+        except Exception as e:
+            nt_status_error = nt_status_error_filter(str(e))
+            if nt_status_error:
+                return Result(None, f"Could not get domain_lockout policy: {nt_status_error}")
+            return Result(None, "Could not get domain lockout policy")
 
         return Result(policy, f"Found policy:\n{yaml.dump(policy, sort_keys=False).rstrip()}")
 
