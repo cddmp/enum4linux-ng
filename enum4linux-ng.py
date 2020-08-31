@@ -328,11 +328,11 @@ class Credentials:
 class SambaConfig:
     '''
     Allows to create custom Samba configurations which can be passed via path to the various Samba client tools.
-    This is allows to enable non-default features for the Samba tools like SMBv1 which is disabled in recent
-    Samba client tools versions by default.
+    Currently such a configuration is always created on tool start. This allows to overcome issues with newer
+    releases of the Samba client tools where certain features are disabled by default.
     '''
     def __init__(self, entries):
-        config = '\n'.join(entries)
+        config = '\n'.join(['[global]']+entries)
         config_file = tempfile.NamedTemporaryFile(delete=False)
         config_file.write(config.encode())
         self.config_filename = config_file.name
@@ -340,6 +340,15 @@ class SambaConfig:
 
     def get_path(self):
         return self.config_filename
+
+    def add(self, entry):
+        try:
+            config_file = open(self.config_filename, 'a')
+            config_file.write(entries)
+            config_file.close()
+            return True
+        except:
+            return False
 
     def __del__(self):
         try:
@@ -587,8 +596,7 @@ class EnumSmb():
 
     def enforce_smb1(self):
         try:
-            samba_config = SambaConfig(['[global]', 'client min protocol = NT1'])
-            self.target.samba_config = samba_config
+            self.target.samba_config.add(['client min protocol = NT1'])
             return Result(True, "")
         except:
             return Result(False, "Could not enforce SMBv1")
@@ -2030,19 +2038,24 @@ class Enumerator():
 
         # Init target and creds
         try:
-            creds = Credentials(args.user, args.pw)
-            target = Target(args.host, args.workgroup, timeout=args.timeout)
+            self.creds = Credentials(args.user, args.pw)
+            self.target = Target(args.host, args.workgroup, timeout=args.timeout)
         except:
             raise Exception(f"Target {args.host} is not a valid IP or could not be resolved.")
 
+        # Init default SambaConfig, make sure 'client ipc signing' is not required
+        try:
+            samba_config = SambaConfig(['client ipc signing = auto'])
+            self.target.samba_config = samba_config
+        except:
+            raise Exception("Could not create default samba configuration.")
+
         # Add target host and creds to output, so that it will end up in the JSON/YAML
-        output.update(target.as_dict())
-        output.update(creds.as_dict())
+        output.update(self.target.as_dict())
+        output.update(self.creds.as_dict())
 
         self.args = args
         self.output = output
-        self.target = target
-        self.creds = creds
         self.cycle_params = None
         self.share_brute_params = None
 
