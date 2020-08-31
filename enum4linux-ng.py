@@ -2474,10 +2474,8 @@ def check_args(argv):
         parser.print_help()
         abort(1, f"Unrecognized argument(s): {', '.join(unknown)}. Exiting.")
 
-    if args.host and (len(argv) == 1 or (len(argv) == 3 and (args.out_json_file or args.out_yaml_file))) or args.A:
+    if not (args.A or args.As or args.U or args.G or args.Gm or args.S or args.C or args.P or args.O or args.L or args.I or args.R or args.N or args.shares_file):
         args.A = True
-    else:
-        args.A = False
 
     if args.A or args.As:
         args.G = True
