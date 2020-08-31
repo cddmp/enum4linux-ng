@@ -1026,7 +1026,7 @@ class EnumOsInfo():
             match = re.search(r".*\((.*)\)", server_type_string)
             if match:
                 return  f"Linux/Unix ({match.group(1)})"
-            return  f"Linux/Unix)"
+            return  f"Linux/Unix"
 
         if os_version in OS_VERSIONS:
             return OS_VERSIONS[os_version]
