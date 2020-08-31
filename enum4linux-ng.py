@@ -330,7 +330,7 @@ class SambaConfig:
     releases of the Samba client tools where certain features are disabled by default.
     '''
     def __init__(self, entries):
-        config = '\n'.join(['[global]']+entries)
+        config = '\n'.join(['[global]']+entries) + '\n'
         config_file = tempfile.NamedTemporaryFile(delete=False)
         config_file.write(config.encode())
         self.config_filename = config_file.name
@@ -339,10 +339,11 @@ class SambaConfig:
     def get_path(self):
         return self.config_filename
 
-    def add(self, entry):
+    def add(self, entries):
         try:
+            config = '\n'.join(entries) + '\n'
             config_file = open(self.config_filename, 'a')
-            config_file.write(entries)
+            config_file.write(config)
             config_file.close()
             return True
         except:
@@ -594,10 +595,11 @@ class EnumSmb():
 
     def enforce_smb1(self):
         try:
-            self.target.samba_config.add(['client min protocol = NT1'])
-            return Result(True, "")
+            if self.target.samba_config.add(['client min protocol = NT1']):
+                return Result(True, "")
         except:
-            return Result(False, "Could not enforce SMBv1")
+            pass
+        return Result(False, "Could not enforce SMBv1")
 
     def check_smb1(self):
         '''
