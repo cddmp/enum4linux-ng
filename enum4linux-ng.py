@@ -402,9 +402,9 @@ class Output:
 ### Service Scans
 
 class ServiceScan():
-    def __init__(self, target, check_list):
+    def __init__(self, target, scan_list):
         self.target = target
-        self.check_list = check_list
+        self.scan_list = scan_list
         self.services = OrderedDict({})
 
     def run(self):
@@ -413,7 +413,7 @@ class ServiceScan():
 
         print_heading(f"Service Scan on {self.target.host}")
         for service, port in SERVICES.items():
-            if service not in self.check_list:
+            if service not in self.scan_list:
                 continue
 
             print_info(f"Checking {service} (timeout: {self.target.timeout}s)")
@@ -2078,16 +2078,16 @@ class Enumerator():
         # By default we scan for 445/tcp and 139/tcp (SMB).
         # LDAP will be added if the user requested any option which requires LDAP
         # like -L or -A.
-        check_list = [SERVICE_SMB, SERVICE_SMB_NETBIOS]
+        scan_list = [SERVICE_SMB, SERVICE_SMB_NETBIOS]
         if self.args.L:
-            check_list += [SERVICE_LDAP, SERVICE_LDAPS]
+            scan_list += [SERVICE_LDAP, SERVICE_LDAPS]
 
-        check = ServiceScan(self.target, check_list)
-        result = check.run()
+        scanner = ServiceScan(self.target, scan_list)
+        result = scanner.run()
         self.output.update(result)
-        self.target.smb_ports = check.get_accessible_ports_by_pattern("SMB")
-        self.target.ldap_ports = check.get_accessible_ports_by_pattern("LDAP")
-        return check.get_accessible_services()
+        self.target.smb_ports = scanner.get_accessible_ports_by_pattern("SMB")
+        self.target.ldap_ports = scanner.get_accessible_ports_by_pattern("LDAP")
+        return scanner.get_accessible_services()
 
     def get_modules(self, services, sessions=True):
         modules = []
