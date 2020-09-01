@@ -303,7 +303,7 @@ class Target:
             if result[0][0] == socket.AF_INET:
                 self.ip_version = 4
                 return True
-        except Exception as e:
+        except:
             pass
         return False
 
