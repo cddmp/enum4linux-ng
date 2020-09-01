@@ -276,6 +276,7 @@ class Target:
         self.ip_version = None
         self.smb_ports = []
         self.ldap_ports = []
+        self.services = []
 
         if not self.valid_host(host):
             raise Exception()
