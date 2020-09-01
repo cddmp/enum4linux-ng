@@ -937,7 +937,7 @@ class EnumLsaqueryDomainInfo():
         Takes the result of rpclient's lsaquery command and tries to determine from the result whether the host
         is part of a domain or workgroup.
         '''
-        if "Domain Sid: S-0-0" or "Domain Sid: (NULL SID)" in lsaquery_result:
+        if "Domain Sid: S-0-0" in lsaquery_result or "Domain Sid: (NULL SID)" in lsaquery_result:
             return Result("workgroup", "Host is part of a workgroup (not a domain)")
         if re.search(r"Domain Sid: S-\d+-\d+-\d+-\d+-\d+-\d+", lsaquery_result):
             return Result("domain", "Host is part of a domain (not a workgroup)")
