@@ -831,7 +831,8 @@ class EnumLdapDomainInfo():
         This is done by searching for specific naming contexts.
         '''
         parent = False
-        if "DC=DomainDnsZones" or "ForestDnsZones" in namingcontexts_result:
+        namingcontexts_result = '\n'.join(namingcontexts_result)
+        if "DC=DomainDnsZones" in namingcontexts_result or "ForestDnsZones" in namingcontexts_result:
             parent = True
         if parent:
             return Result(True, "Appears to be root/parent DC")
