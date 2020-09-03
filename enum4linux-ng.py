@@ -1612,6 +1612,7 @@ class EnumShares():
         if enum.retval is None:
             output = process_error(enum.retmsg, ["shares"], module_name, output)
         else:
+            print_info(f"Enumerating shares")
             # This will print success even if no shares were found (which is not an error.)
             print_success(enum.retmsg)
             shares = enum.retval
@@ -1624,7 +1625,7 @@ class EnumShares():
                         output = process_error(access.retmsg, ["shares"], module_name, output)
                         continue
                     print_success(access.retmsg)
-                    shares[share] = access.retval
+                    shares[share]['access'] = access.retval
 
         output["shares"] = shares
         return output
@@ -1642,13 +1643,16 @@ class EnumShares():
             return Result(None, f"Could not list shares: {result.retmsg}")
 
         shares = {}
-        match_list = re.findall(r"\n\s*([\S]+?)\s+(?:Disk|IPC|Printer)", result.retmsg, re.IGNORECASE)
+        match_list = re.findall(r"^\s*([\S]+)\s+(Device|Disk|IPC|Printer)[ \t]*([^\n]*)$", result.retmsg, re.MULTILINE|re.IGNORECASE)
         if match_list:
-            for share in match_list:
-                shares[share] = {}
+            for entry in match_list:
+                share_name = entry[0]
+                share_type = entry[1]
+                share_comment = entry[2].rstrip()
+                shares[share_name] = {'type':share_type, 'comment':share_comment}
 
         if shares:
-            return Result(shares, f"Found {len(shares.keys())} share(s): {','.join(shares.keys())}")
+            return Result(shares, f"Found {len(shares.keys())} share(s):\n{yaml.dump(shares, sort_keys=False).rstrip()}")
         return Result(shares, f"Found 0 share(s) for user '{self.creds.user}' with password '{self.creds.pw}', try a different user")
 
     def check_access(self, share):
