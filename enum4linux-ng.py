@@ -1618,7 +1618,7 @@ class EnumShares():
             shares = enum.retval
             # Check access if there are any shares.
             if enum.retmsg:
-                for share in shares.keys():
+                for share in sorted(shares):
                     print_info(f"Testing share {share}")
                     access = self.check_access(share)
                     if access.retval is None:
