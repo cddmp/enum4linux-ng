@@ -400,7 +400,7 @@ class Output:
                 if self.out_file_type == "json":
                     f.write(json.dumps(self.out_dict, indent=4))
                 elif self.out_file_type == "yaml":
-                    f.write(yamlize(self.out_dict, sort=False))
+                    f.write(yamlize(self.out_dict, rstrip=False))
                 f.close()
             except:
                 abort(1, f"An error happened trying to write {self.out_file}. Exiting.")
@@ -2438,8 +2438,11 @@ def abort(code, msg):
     print_error(msg)
     sys.exit(code)
 
-def yamlize(msg, sort=False):
-    return yaml.dump(msg, sort_keys=sort).rstrip()
+def yamlize(msg, sort=False, rstrip=True):
+    result = yaml.dump(msg, sort_keys=sort)
+    if rstrip:
+        return result.rstrip()
+    return result
 
 ### Argument Processing
 
