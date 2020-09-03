@@ -400,7 +400,7 @@ class Output:
                 if self.out_file_type == "json":
                     f.write(json.dumps(self.out_dict, indent=4))
                 elif self.out_file_type == "yaml":
-                    f.write(yaml.dump(self.out_dict, sort_keys=False))
+                    f.write(yamlize(self.out_dict, sort=False))
                 f.close()
             except:
                 abort(1, f"An error happened trying to write {self.out_file}. Exiting.")
@@ -556,7 +556,7 @@ class EnumNetbios():
                             break
             else:
                 output.append(line)
-        return Result(output, f"Full NetBIOS names information:\n{yaml.dump(output).rstrip()}")
+        return Result(output, f"Full NetBIOS names information:\n{yamlize(output)}")
 
 ### SMB checks
 
@@ -1096,7 +1096,7 @@ class EnumUsersRpc():
                         output = process_error(user_details.retmsg, ["users"], module_name, output)
                         users[rid]["details"] = ""
 
-            print_success(f"After merging user results we have {len(users.keys())} users total:\n{yaml.dump(users).rstrip()}")
+            print_success(f"After merging user results we have {len(users.keys())} users total:\n{yamlize(users, sort=True)}")
 
         output["users"] = users
         return output
@@ -1281,7 +1281,7 @@ class EnumGroupsRpc():
                         output = process_error(details.retmsg, ["groups"], module_name, output)
                     groups[rid]["details"] = details.retval
 
-            print_success(f"After merging groups results we have {len(groups.keys())} groups total:\n{yaml.dump(groups).rstrip()}")
+            print_success(f"After merging groups results we have {len(groups.keys())} groups total:\n{yamlize(groups, sort=True)}")
         output["groups"] = groups
         return output
 
@@ -1652,7 +1652,7 @@ class EnumShares():
                 shares[share_name] = {'type':share_type, 'comment':share_comment}
 
         if shares:
-            return Result(shares, f"Found {len(shares.keys())} share(s):\n{yaml.dump(shares, sort_keys=False).rstrip()}")
+            return Result(shares, f"Found {len(shares.keys())} share(s):\n{yamlize(shares)}")
         return Result(shares, f"Found 0 share(s) for user '{self.creds.user}' with password '{self.creds.pw}', try a different user")
 
     def check_access(self, share):
@@ -1849,7 +1849,7 @@ class EnumPolicy():
                 return Result(None, f"Could not get domain_lockout policy: {nt_status_error}")
             return Result(None, "Could not get domain lockout policy")
 
-        return Result(policy, f"Found policy:\n{yaml.dump(policy, sort_keys=False).rstrip()}")
+        return Result(policy, f"Found policy:\n{yamlize(policy)}")
 
     # This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
     # All credits to Wh1t3Fox!
@@ -1991,7 +1991,7 @@ class EnumPrinters():
             comment = match[3]
             printers[name] = OrderedDict({"description":description, "comment":comment, "flags":flags})
 
-        return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yaml.dump(printers).rstrip()}")
+        return Result(printers, f"Found {len(printers.keys())} printer(s):\n{yamlize(printers, sort=True)}")
 
 ### Services Enumeration
 
@@ -2037,7 +2037,7 @@ class EnumServices():
             description = match[1]
             services[name] = OrderedDict({"description":description})
 
-        return Result(services, f"Found {len(services.keys())} service(s):\n{yaml.dump(services).rstrip()}")
+        return Result(services, f"Found {len(services.keys())} service(s):\n{yamlize(services, True)}")
 
 ### Enumerator
 
@@ -2437,6 +2437,9 @@ def abort(code, msg):
     '''
     print_error(msg)
     sys.exit(code)
+
+def yamlize(msg, sort=False):
+    return yaml.dump(msg, sort_keys=sort).rstrip()
 
 ### Argument Processing
 
