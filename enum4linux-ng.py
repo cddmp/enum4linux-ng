@@ -1652,7 +1652,7 @@ class EnumShares():
                 shares[share_name] = {'type':share_type, 'comment':share_comment}
 
         if shares:
-            return Result(shares, f"Found {len(shares.keys())} share(s):\n{yamlize(shares)}")
+            return Result(shares, f"Found {len(shares.keys())} share(s):\n{yamlize(shares, sort=True)}")
         return Result(shares, f"Found 0 share(s) for user '{self.creds.user}' with password '{self.creds.pw}', try a different user")
 
     def check_access(self, share):
