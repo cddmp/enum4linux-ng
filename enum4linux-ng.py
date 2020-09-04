@@ -1142,7 +1142,7 @@ class EnumUsersRpc():
 
         # Example output of rpcclient's querydispinfo:
         # index: 0x2 RID: 0x3e9 acb: 0x00000010 Account: tester	Name: 	Desc:
-        for line in querydispinfo.retval.splitlines():
+        for line in filter(None, querydispinfo.retval.split('\n')):
             match = re.search(r"index:\s+.*\s+RID:\s+(0x[A-F-a-f0-9]+)\s+acb:\s+(.*)\s+Account:\s+(.*)\s+Name:\s+(.*)\s+Desc:\s+(.*)", line)
             if match:
                 rid = match.group(1)
