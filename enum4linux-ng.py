@@ -1203,7 +1203,7 @@ class EnumUsersRpc():
             user_info = match.group(1)
             user_info = user_info.replace("\t", "")
 
-            for line in user_info.splitlines():
+            for line in filter(None, user_info.split('\n')):
                 if ':' in line:
                     (key, value) = line.split(":", 1)
                     key = key.rstrip()
@@ -1392,7 +1392,7 @@ class EnumGroupsRpc():
             group_info = match.group(1)
             group_info = group_info.replace("\t", "")
 
-            for line in group_info.splitlines():
+            for line in filter(None, group_info.split('\n')):
                 if ':' in line:
                     (key, value) = line.split(":", 1)
                     # Skip group name, we have this information already
