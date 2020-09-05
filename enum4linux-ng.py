@@ -2443,7 +2443,8 @@ def abort(code, msg):
     sys.exit(code)
 
 def yamlize(msg, sort=False, rstrip=True):
-    result = yaml.dump(msg, sort_keys=sort, Dumper=Dumper)
+    #result = yaml.dump(msg, sort_keys=sort, Dumper=Dumper)
+    result = yaml.dump(msg, sort_keys=sort)
     if rstrip:
         return result.rstrip()
     return result
