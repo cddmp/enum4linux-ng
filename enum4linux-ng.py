@@ -79,10 +79,10 @@ from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
 import yaml
-try:
-    from yaml import CDumper as Dumper
-except ImportError:
-    from yaml import Dumper
+#try:
+#    from yaml import CDumper as Dumper
+#except ImportError:
+#    from yaml import Dumper
 
 ###############################################################################
 # The following  mappings for nmblookup (nbtstat) status codes to human readable
