@@ -79,10 +79,10 @@ from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
 import yaml
-#try:
-#    from yaml import CDumper as Dumper
-#except ImportError:
-#    from yaml import Dumper
+try:
+    from yaml import CDumper as Dumper
+except ImportError:
+    from yaml import Dumper
 
 ###############################################################################
 # The following  mappings for nmblookup (nbtstat) status codes to human readable
@@ -2443,8 +2443,7 @@ def abort(code, msg):
     sys.exit(code)
 
 def yamlize(msg, sort=False, rstrip=True):
-    #result = yaml.dump(msg, sort_keys=sort, Dumper=Dumper)
-    result = yaml.dump(msg, sort_keys=sort)
+    result = yaml.dump(msg, default_flow_style=False, sort_keys=sort, Dumper=Dumper)
     if rstrip:
         return result.rstrip()
     return result
@@ -2561,7 +2560,7 @@ def main():
     print_banner()
 
     # Make sure yaml can handle OrdereDicts
-    yaml.add_representer(OrderedDict, lambda dumper, data: dumper.represent_mapping('tag:yaml.org,2002:map', data.items()))
+    Dumper.add_representer(OrderedDict, lambda dumper, data: dumper.represent_mapping('tag:yaml.org,2002:map', data.items()))
 
     # Dependency checks
     check_dependencies()
