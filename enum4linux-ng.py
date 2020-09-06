@@ -1360,15 +1360,15 @@ class EnumGroupsRpc():
         result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
 
         if not result.retval:
-            return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}): {result.retmsg}")
+            return Result(None, f"Could not lookup members for {grouptype} group '{groupname}' (RID {rid}): {result.retmsg}")
 
         members_string = result.retmsg
         members = []
         for member in members_string.splitlines():
             if "Couldn't lookup SIDs" in member:
-                return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}) due to insufficient user permissions, try a different user")
+                return Result(None, f"Could not lookup members for {grouptype} group '{groupname}' (RID {rid}): insufficient user permissions, try a different user")
             if "Couldn't find group" in member:
-                return Result(None, f"Members lookup failed for {grouptype} group '{groupname}' (RID {rid}), group could not be found")
+                return Result(None, f"Could not lookup members for {grouptype} group '{groupname}' (RID {rid}): group not found")
             members.append(member)
 
         return Result(','.join(members), f"Found {len(members)} member(s) for {grouptype} group '{groupname}' (RID {rid})")
