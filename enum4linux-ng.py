@@ -629,7 +629,7 @@ class EnumSmb():
                     return Result(None, f"SMB connection error on port {self.target.port}/tcp: timed out")
             if isinstance(e, nmb.NetBIOSError):
                 return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
-            if isinstance(e, smb.SessionError) or isinstance(e, smb3.SessionError):
+            if isinstance(e, (smb.SessionError, smb3.SessionError)):
                 if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED:
                     return Result(False, "Server supports dialects higher SMBv1")
                 return Result(None, "SMB connection error: session failed")
