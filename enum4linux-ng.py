@@ -460,6 +460,8 @@ class ServiceScan():
             if result == 0:
                 return Result(True, f"{service} is accessible on {port}/tcp")
             return Result(False, f"Could not connect to {service} on {port}/tcp: {SOCKET_ERRORS[result]}")
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except:
             return Result(False, f"Could not connect to {service} on {port}/tcp")
 
@@ -626,6 +628,8 @@ class EnumSmb():
                 return Result(True, "Server supports only SMBv1")
             return Result(False, "Server supports dialects higher SMBv1")
 
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
             if len(e.args) == 2:
                 if isinstance(e.args[1], ConnectionRefusedError):
@@ -796,6 +800,8 @@ class EnumLdapDomainInfo():
             server = Server(self.target.host, use_ssl=self.target.tls, get_info=DSA, connect_timeout=self.target.timeout)
             ldap_con = Connection(server, auto_bind=True)
             ldap_con.unbind()
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
             if len(e.args) == 1:
                 error = str(e.args[0])
@@ -1826,6 +1832,8 @@ class EnumPolicy():
                     policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:True})
                 else:
                     policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:False})
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
@@ -1840,6 +1848,8 @@ class EnumPolicy():
             policy["domain_lockout_information"]["lockout_observation_window"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
             policy["domain_lockout_information"]["lockout_duration"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
             policy["domain_lockout_information"]["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
@@ -1852,6 +1862,8 @@ class EnumPolicy():
             result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
             policy["domain_logoff_information"] = {}
             policy["domain_logoff_information"]["force_logoff_time"] = self.policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
@@ -1873,6 +1885,8 @@ class EnumPolicy():
             dce = DCERPC_v5(rpctransport)
             dce.connect()
             dce.bind(samr.MSRPC_UUID_SAMR)
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except:
             return Result((None, None), f"DCE/SAMR named pipe connect failed on port {self.target.port}/tcp")
 
