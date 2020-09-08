@@ -18,6 +18,8 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 - colored console output
 - ldapsearch und polenum are natively implemented
 - support for legacy SMBv1 connections
+- auto detection of IPC signing support
+- 'smart' enumeration will automatically disable tests which would otherwise fail
 - IPv6 support (experimental)
 
 ## Credits
