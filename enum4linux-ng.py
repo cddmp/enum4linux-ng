@@ -355,11 +355,12 @@ class SambaConfig:
         except:
             return False
 
-    def __del__(self):
+    def delete(self):
         try:
             os.remove(self.config_filename)
         except OSError:
-            pass
+            return Result(False, f"Could not delete samba configuration file {self.config_filename}")
+        return Result(True, "")
 
 class Output:
     '''
@@ -400,6 +401,7 @@ class Output:
         # Only for nice JSON/YAML output (errors at the end)
         self.out_dict.move_to_end("errors")
 
+        # Write JSON/YAML
         if self.out_file is not None:
             try:
                 f = open(self.out_file, 'w')
@@ -408,8 +410,9 @@ class Output:
                 elif self.out_file_type == "yaml":
                     f.write(yamlize(self.out_dict, rstrip=False))
                 f.close()
-            except:
-                raise RuntimeError("An error happened trying to write {self.out_file}")
+            except OSError:
+                return Result(False, f"Could not write to file {self.out_file}")
+        return Result(True, "")
 
     def as_dict(self):
         return self.out_dict
@@ -687,7 +690,7 @@ class EnumSessions():
         if output["null_session_possible"] or output["user_session_possible"] or output["random_user_session_possible"]:
             output["sessions_possible"] = True
         else:
-            process_error("Sessions failed, neither null nor user sessions were possible.", ["sessions_possible", "null_session_possible", "user_session_possible", "random_user_session_possible"], module_name, output)
+            process_error("Sessions failed, neither null nor user sessions were possible", ["sessions_possible", "null_session_possible", "user_session_possible", "random_user_session_possible"], module_name, output)
 
         return output
 
@@ -2274,14 +2277,25 @@ class Enumerator():
         return rid_ranges_list
 
     def finish(self):
+        errors = []
+
         # Delete temporary samba config
         if hasattr(self, 'target'):
             if self.target.samba_config is not None:
-                del self.target.samba_config
+                result = self.target.samba_config.delete()
+                if not result.retval:
+                    errors.append(result.retmsg)
 
         # Write YAML/JSON output (if the user requested that)
         if hasattr(self, 'output'):
-            self.output.flush()
+            result = self.output.flush()
+            if not result.retval:
+                errors.append(result.retmsg)
+
+        if errors:
+            return Result(False, "\n".join(errors))
+        return Result(True, "")
+
 ###
 
 def run(command, description="", samba_config=None, error_filter=True):
@@ -2405,9 +2419,6 @@ def print_heading(text):
 def print_success(msg):
     print(f"{Colors.green}[+] {msg + Colors.reset}")
 
-def print_warn(msg):
-    print(f"{Colors.yellow}[!] {msg + Colors.reset}")
-
 def print_error(msg):
     print(f"{Colors.red}[-] {msg + Colors.reset}")
 
@@ -2448,8 +2459,11 @@ def abort(code, msg):
     as well as an error message. The error message will be printed out, the status code will
     be used as exit code.
     '''
-    print_error(msg)
+    print(f"\n{Colors.red}[!] {msg + Colors.reset}")
     sys.exit(code)
+
+def warn(msg):
+    print(f"\n{Colors.yellow}[!] {msg + Colors.reset}")
 
 def yamlize(msg, sort=False, rstrip=True):
     result = yaml.dump(msg, default_flow_style=False, sort_keys=sort, Dumper=Dumper)
@@ -2496,12 +2510,12 @@ def check_arguments(argv):
 
     if len(argv) == 0:
         parser.print_help()
-        raise RuntimeError("No arguments provided, need at least argument host")
+        raise RuntimeError("No arguments provided, need at least argument 'host'")
     args, unknown = parser.parse_known_args(sys.argv[1:])
 
     if unknown:
         parser.print_help()
-        raise RuntimeError("Unrecognized argument(s): {', '.join(unknown)}")
+        raise RuntimeError(f"Unrecognized argument(s): {', '.join(unknown)}")
 
     if not (args.A or args.As or args.U or args.G or args.Gm or args.S or args.C or args.P or args.O or args.L or args.I or args.R or args.N or args.shares_file):
         args.A = True
@@ -2557,9 +2571,9 @@ def check_dependencies():
             missing.append(dep)
 
     if missing:
-        error_msg = (f"The following dependend programs are missing: {', '.join(missing)}"
-                      "     For Gentoo, you need to install the 'samba' package."
-                      "     For Debian derivates (like Ubuntu) or ArchLinux, you need to install the 'smbclient' package."
+        error_msg = (f"The following dependend tools are missing: {', '.join(missing)}\n"
+                      "     For Gentoo, you need to install the 'samba' package.\n"
+                      "     For Debian derivates (like Ubuntu) or ArchLinux, you need to install the 'smbclient' package.\n"
                       "     For Fedora derivates (like RHEL, CentOS), you need to install the 'samba-common-tools' and 'samba-client' package.")
         raise RuntimeError(error_msg)
 
@@ -2582,11 +2596,16 @@ def main():
         enum = Enumerator(args)
         enum.run()
     except RuntimeError as e:
-        abort(1, f"Runtime error: {str(e)}")
+        abort(1, f"{str(e)}")
     except KeyboardInterrupt:
-        print_warn("Received SIGINT, aborting enumeration")
+        warn("Received SIGINT, aborting enumeration")
     finally:
-        enum.finish()
+        try:
+            result = enum.finish()
+            if not result.retval:
+                abort(1, f"{result.retmsg}")
+        except NameError:
+            pass
     elapsed_time = datetime.now() - start_time
 
     print(f"\nCompleted after {elapsed_time.total_seconds():.2f} seconds")
