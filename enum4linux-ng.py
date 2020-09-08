@@ -249,6 +249,7 @@ class Colors:
     reset = '\033[0m'
     red = '\033[91m'
     green = '\033[92m'
+    yellow = '\033[93m'
     blue = '\033[94m'
 
 class Result:
@@ -395,6 +396,7 @@ class Output:
                 else:
                     self.out_dict["errors"][key] = value
 
+    def flush(self):
         # Only for nice JSON/YAML output (errors at the end)
         self.out_dict.move_to_end("errors")
 
@@ -407,7 +409,7 @@ class Output:
                     f.write(yamlize(self.out_dict, rstrip=False))
                 f.close()
             except:
-                abort(1, f"An error happened trying to write {self.out_file}. Exiting.")
+                raise RuntimeError("An error happened trying to write {self.out_file}")
 
     def as_dict(self):
         return self.out_dict
@@ -2061,14 +2063,14 @@ class Enumerator():
             self.creds = Credentials(args.user, args.pw)
             self.target = Target(args.host, args.workgroup, timeout=args.timeout)
         except:
-            raise Exception(f"Target {args.host} is not a valid IP or could not be resolved.")
+            raise RuntimeError(f"Target {args.host} is not a valid IP or could not be resolved")
 
         # Init default SambaConfig, make sure 'client ipc signing' is not required
         try:
             samba_config = SambaConfig(['client ipc signing = auto'])
             self.target.samba_config = samba_config
         except:
-            raise Exception("Could not create default samba configuration.")
+            raise RuntimeError("Could not create default samba configuration")
 
         # Add target host and creds to output, so that it will end up in the JSON/YAML
         output.update(self.target.as_dict())
@@ -2271,11 +2273,15 @@ class Enumerator():
 
         return rid_ranges_list
 
-    def __del__(self):
+    def finish(self):
         # Delete temporary samba config
         if hasattr(self, 'target'):
             if self.target.samba_config is not None:
                 del self.target.samba_config
+
+        # Write YAML/JSON output (if the user requested that)
+        if hasattr(self, 'output'):
+            self.output.flush()
 ###
 
 def run(command, description="", samba_config=None, error_filter=True):
@@ -2399,6 +2405,9 @@ def print_heading(text):
 def print_success(msg):
     print(f"{Colors.green}[+] {msg + Colors.reset}")
 
+def print_warn(msg):
+    print(f"{Colors.yellow}[!] {msg + Colors.reset}")
+
 def print_error(msg):
     print(f"{Colors.red}[-] {msg + Colors.reset}")
 
@@ -2450,7 +2459,7 @@ def yamlize(msg, sort=False, rstrip=True):
 
 ### Argument Processing
 
-def check_args(argv):
+def check_arguments(argv):
     '''
     Takes all arguments from argv and processes them via ArgumentParser. In addition, some basic
     validation of arguments is done.
@@ -2487,12 +2496,12 @@ def check_args(argv):
 
     if len(argv) == 0:
         parser.print_help()
-        abort(1, "No arguments provided. Need at least argument host. Exiting.")
+        raise RuntimeError("No arguments provided, need at least argument host")
     args, unknown = parser.parse_known_args(sys.argv[1:])
 
     if unknown:
         parser.print_help()
-        abort(1, f"Unrecognized argument(s): {', '.join(unknown)}. Exiting.")
+        raise RuntimeError("Unrecognized argument(s): {', '.join(unknown)}")
 
     if not (args.A or args.As or args.U or args.G or args.Gm or args.S or args.C or args.P or args.O or args.L or args.I or args.R or args.N or args.shares_file):
         args.A = True
@@ -2515,17 +2524,17 @@ def check_args(argv):
     # Check Workgroup
     if args.workgroup:
         if not valid_workgroup(args.workgroup):
-            abort(1, f"Workgroup '{args.workgroup}' contains illegal character. Exiting.")
+            raise RuntimeError(f"Workgroup '{args.workgroup}' contains illegal character")
 
     # Check for RID ranges
     if not valid_rid_ranges(args.ranges):
-        abort(1, "The given RID ranges should be a range '10-20' or just a single RID like '1199'. Exiting.")
+        raise RuntimeError("The given RID ranges should be a range '10-20' or just a single RID like '1199'")
 
     # Check shares file
     if args.shares_file:
         validation = valid_shares_file(args.shares_file)
         if not validation.retval:
-            abort(1, validation.retmsg)
+            raise RuntimeError(validation.retmsg)
 
     # Add given users to list of RID cycle users automatically
     if args.user and args.user not in args.users.split(","):
@@ -2533,7 +2542,7 @@ def check_args(argv):
 
     # Check timeout
     if not valid_timeout(args.timeout):
-        abort(1, "Timeout must be a valid integer equal or greater zero.")
+        raise RuntimeError("Timeout must be a valid integer equal or greater zero")
     args.timeout = int(args.timeout)
 
     return args
@@ -2548,35 +2557,38 @@ def check_dependencies():
             missing.append(dep)
 
     if missing:
-        print_error(f"The following dependend programs are missing: {', '.join(missing)}")
-        print_error('     For Gentoo, you need to install the "samba" package.')
-        print_error('     For Debian derivates (like Ubuntu) or ArchLinux, you need to install the "smbclient" package.')
-        print_error('     For Fedora derivates (like RHEL, CentOS), you need to install the "samba-common-tools" and "samba-client" package.')
-        abort(1, "Exiting.")
+        error_msg = (f"The following dependend programs are missing: {', '.join(missing)}"
+                      "     For Gentoo, you need to install the 'samba' package."
+                      "     For Debian derivates (like Ubuntu) or ArchLinux, you need to install the 'smbclient' package."
+                      "     For Fedora derivates (like RHEL, CentOS), you need to install the 'samba-common-tools' and 'samba-client' package.")
+        raise RuntimeError(error_msg)
 
 ### Run!
 
 def main():
     print_banner()
 
-    # Make sure yaml can handle OrdereDicts
-    Dumper.add_representer(OrderedDict, lambda dumper, data: dumper.represent_mapping('tag:yaml.org,2002:map', data.items()))
-
-    # Dependency checks
-    check_dependencies()
-
-    # Process arguments
-    args = check_args(sys.argv[1:])
+    # Check dependencies and process arguments, make sure yaml can handle OrdereDicts
+    try:
+        Dumper.add_representer(OrderedDict, lambda dumper, data: dumper.represent_mapping('tag:yaml.org,2002:map', data.items()))
+        check_dependencies()
+        args = check_arguments(sys.argv[1:])
+    except Exception as e:
+        abort(1, str(e))
 
     # Run!
     start_time = datetime.now()
     try:
-        enumerator = Enumerator(args)
-        enumerator.run()
-        del enumerator
-    except Exception as e:
-        abort(1, str(e))
+        enum = Enumerator(args)
+        enum.run()
+    except RuntimeError as e:
+        abort(1, f"Runtime error: {str(e)}")
+    except KeyboardInterrupt:
+        print_warn("Received SIGINT, aborting enumeration")
+    finally:
+        enum.finish()
     elapsed_time = datetime.now() - start_time
+
     print(f"\nCompleted after {elapsed_time.total_seconds():.2f} seconds")
 
 if __name__ == "__main__":
