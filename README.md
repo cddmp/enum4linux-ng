@@ -42,6 +42,7 @@ This demonstrates a run against Windows Server 2012 R2 standard installation. A 
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo1.gif)
 
 The second demo shows a run against Metasploitable2. This time no credentials were provided. The tool automatically detects that it needs to use SMBv1. This time also services enumeration is enabled with the ```-C``` option, no YAML or JSON file is being written. Again I scroll up so that the results become more clear.
+
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo2.gif)
 
 ## Installing dependencies
