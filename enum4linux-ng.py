@@ -2600,12 +2600,10 @@ def main():
     except KeyboardInterrupt:
         warn("Received SIGINT, aborting enumeration")
     finally:
-        try:
+        if 'enum' in locals():
             result = enum.finish()
             if not result.retval:
                 abort(1, f"{result.retmsg}")
-        except NameError:
-            pass
     elapsed_time = datetime.now() - start_time
 
     print(f"\nCompleted after {elapsed_time.total_seconds():.2f} seconds")
