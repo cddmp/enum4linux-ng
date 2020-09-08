@@ -1224,7 +1224,7 @@ class EnumUsersRpc():
                     details[line] = ""
 
             if "acb_info" in details and valid_hex(details["acb_info"]):
-                for key in ACB_DICT.keys():
+                for key in ACB_DICT:
                     if int(details["acb_info"], 16) & key:
                         details[ACB_DICT[key]] = True
                     else:
@@ -1821,7 +1821,7 @@ class EnumPolicy():
             policy["domain_password_information"]["max_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
             policy["domain_password_information"]["pw_properties"] = []
             pw_prop = result['Buffer']['Password']['PasswordProperties']
-            for bitmask in DOMAIN_FIELDS.keys():
+            for bitmask in DOMAIN_FIELDS:
                 if pw_prop & bitmask == bitmask:
                     policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:True})
                 else:
@@ -2572,9 +2572,9 @@ def check_dependencies():
 
     if missing:
         error_msg = (f"The following dependend tools are missing: {', '.join(missing)}\n"
-                      "     For Gentoo, you need to install the 'samba' package.\n"
-                      "     For Debian derivates (like Ubuntu) or ArchLinux, you need to install the 'smbclient' package.\n"
-                      "     For Fedora derivates (like RHEL, CentOS), you need to install the 'samba-common-tools' and 'samba-client' package.")
+                     "     For Gentoo, you need to install the 'samba' package.\n"
+                     "     For Debian derivates (like Ubuntu) or ArchLinux, you need to install the 'smbclient' package.\n"
+                     "     For Fedora derivates (like RHEL, CentOS), you need to install the 'samba-common-tools' and 'samba-client' package.")
         raise RuntimeError(error_msg)
 
 ### Run!
