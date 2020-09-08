@@ -37,11 +37,11 @@ If you use the tool: Don't use it for illegal purposes.
 If you prefer a Docker based installation, an example run can be found [below](#Docker).
 
 ### Demo
-This demonstrates a run against Windows Server 2012 R2 standard installation. A user 'Tester' with password 'Start123!' was created. Firewall access was allowed. Once the enumeration is finished, I scroll up so that the results become more clear. Since no other enumeration option is specified, the tool will assume ```-A``` which behaves similar to enum4linux ```-a``` option. User and password are passed in. The ```-oY``` option will export all enumerated data as YAML file for further processing in ```enum.yaml```.
+This demonstrates a run against Windows Server 2012 R2 standard installation. A user 'Tester' with password 'Start123!' was created. Firewall access was allowed. Once the enumeration is finished, I scroll up so that the results become more clear. Since no other enumeration option is specified, the tool will assume ```-A``` which behaves similar to enum4linux ```-a``` option. User and password are passed in. The ```-oY``` option will export all enumerated data as YAML file for further processing in ```enum.yaml```. The tool automatically detects at the beginning that LDAP is not running on the remote host. It will therefore skip any further LDAP checks which would normally be part of the default enumeration.
 
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo1.gif)
 
-The second demo shows a run against Metasploitable2. This time no credentials were provided. The tool automatically detects that it needs to use SMBv1. This time also services enumeration is enabled with the ```-C``` option, no YAML or JSON file is being written. Again I scroll up so that the results become more clear.
+The second demo shows a run against Metasploitable2. This time the ```-A``` and ```-C``` option are used. While the first one behaves similar to enum4linux  ```-a``` option, the second one will enable enumeration of services. This time no credentials were provided. The tool automatically detects that it needs to use SMBv1. No YAML or JSON file is being written. Again I scroll up so that the results become more clear.
 
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo2.gif)
 
