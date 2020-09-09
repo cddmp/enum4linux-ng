@@ -1877,7 +1877,7 @@ class EnumPolicy():
 
         try:
             resp = samr.hSamrConnect2(dce)
-        except:
+        except Exception:
             return Result((None, None), f"SamrConnect2() call failed on port {self.target.port}/tcp")
         if resp['ErrorCode'] != 0:
             return Result((None, None), f"SamrConnect2() call failed on port {self.target.port}/tcp")
