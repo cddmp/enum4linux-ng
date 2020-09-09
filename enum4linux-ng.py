@@ -2337,9 +2337,9 @@ def run(command, description="", samba_config=None, error_filter=True):
 def valid_timeout(timeout):
     try:
         timeout = int(timeout)
-        if timeout >= 0:
+        if timeout >= 0 and timeout <= 600:
             return True
-    except:
+    except ValueError:
         pass
     return False
 
@@ -2554,7 +2554,7 @@ def check_arguments(argv):
 
     # Check timeout
     if not valid_timeout(args.timeout):
-        raise RuntimeError("Timeout must be a valid integer equal or greater zero")
+        raise RuntimeError("Timeout must be a valid integer in the range 0-600")
     args.timeout = int(args.timeout)
 
     return args
