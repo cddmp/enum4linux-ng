@@ -2452,14 +2452,13 @@ def nt_status_error_filter(msg):
             return error
     return ""
 
-def abort(code, msg):
+def abort(msg):
     '''
-    This function is used to abort() the tool run on error. It will take a status code
-    as well as an error message. The error message will be printed out, the status code will
-    be used as exit code.
+    This function is used to abort the tool run on error.
+    The given error message will be printed out and the tool will abort with exit code 1.
     '''
     print(f"\n{Colors.red}[!] {msg + Colors.reset}")
-    sys.exit(code)
+    sys.exit(1)
 
 def warn(msg):
     print(f"\n{Colors.yellow}[!] {msg + Colors.reset}")
@@ -2587,7 +2586,7 @@ def main():
         check_dependencies()
         args = check_arguments(sys.argv[1:])
     except Exception as e:
-        abort(1, str(e))
+        abort(str(e))
 
     # Run!
     start_time = datetime.now()
@@ -2595,14 +2594,14 @@ def main():
         enum = Enumerator(args)
         enum.run()
     except RuntimeError as e:
-        abort(1, f"{str(e)}")
+        abort(str(e))
     except KeyboardInterrupt:
         warn("Received SIGINT, aborting enumeration")
     finally:
         if 'enum' in locals():
             result = enum.finish()
             if not result.retval:
-                abort(1, f"{result.retmsg}")
+                abort(result.retmsg)
     elapsed_time = datetime.now() - start_time
 
     print(f"\nCompleted after {elapsed_time.total_seconds():.2f} seconds")
