@@ -60,19 +60,19 @@
 # The original enum4linux.pl was released under GPL version 2 or later.
 # The original polenum.py was released under GPL version 3.
 
-import argparse
+from argparse import ArgumentParser
+from collections import OrderedDict
+from datetime import datetime
 import json
 import os
 import random
 import re
-import socket
 import shutil
 import shlex
+import socket
 import subprocess
-import tempfile
 import sys
-from datetime import datetime
-from collections import OrderedDict
+import tempfile
 from impacket import nmb, smb, smbconnection, smb3, nt_errors
 from impacket.smbconnection import SMB_DIALECT
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
@@ -2093,7 +2093,7 @@ class Enumerator():
         if self.args.shares_file:
             self.share_brute_params = ShareBruteParams(self.args.shares_file)
 
-        print_heading("Target Information")
+        print_heading("Target Information", False)
         print_info(f"Target ........... {self.target.host}")
         print_info(f"Username ......... '{self.creds.user}'")
         print_info(f"Random Username .. '{self.creds.random_user}'")
@@ -2405,12 +2405,14 @@ def valid_workgroup(workgroup):
 ### Print Functions and Error Processing
 
 def print_banner():
-    print(f"{Colors.green}ENUM4LINUX - next generation{Colors.reset}")
+    print(f"{Colors.green}ENUM4LINUX - next generation{Colors.reset}\n")
 
-def print_heading(text):
+def print_heading(text, leading_newline=True):
     output = f"|    {text}    |"
     length = len(output)
-    print()
+
+    if leading_newline:
+        print()
     print(" " + "="*(length-2))
     print(output)
     print(" " + "="*(length-2))
@@ -2471,7 +2473,7 @@ def yamlize(msg, sort=False, rstrip=True):
 
 ### Argument Processing
 
-def check_arguments(argv):
+def check_arguments():
     '''
     Takes all arguments from argv and processes them via ArgumentParser. In addition, some basic
     validation of arguments is done.
@@ -2479,7 +2481,7 @@ def check_arguments(argv):
 
     global global_verbose
 
-    parser = argparse.ArgumentParser(argv)
+    parser = ArgumentParser()
     parser.add_argument("host")
     parser.add_argument("-A", action="store_true", help="Do all simple enumeration including nmblookup (-U -G -S -P -O -N -I -L). This option is enabled if you don't provide any other option.")
     parser.add_argument("-As", action="store_true", help="Do all simple short enumeration without NetBIOS names lookup (-U -G -S -P -O -I -L)")
@@ -2505,15 +2507,7 @@ def check_arguments(argv):
     parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file")
     parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
-
-    if len(argv) == 0:
-        parser.print_help()
-        raise RuntimeError("No arguments provided, need at least argument 'host'")
-    args, unknown = parser.parse_known_args(sys.argv[1:])
-
-    if unknown:
-        parser.print_help()
-        raise RuntimeError(f"Unrecognized argument(s): {', '.join(unknown)}")
+    args = parser.parse_args()
 
     if not (args.A or args.As or args.U or args.G or args.Gm or args.S or args.C or args.P or args.O or args.L or args.I or args.R or args.N or args.shares_file):
         args.A = True
@@ -2584,7 +2578,7 @@ def main():
     try:
         Dumper.add_representer(OrderedDict, lambda dumper, data: dumper.represent_mapping('tag:yaml.org,2002:map', data.items()))
         check_dependencies()
-        args = check_arguments(sys.argv[1:])
+        args = check_arguments()
     except Exception as e:
         abort(str(e))
 
