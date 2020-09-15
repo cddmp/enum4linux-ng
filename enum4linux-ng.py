@@ -2481,7 +2481,18 @@ def check_arguments():
 
     global global_verbose
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(description="""This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems.
+            It is mainly a wrapper around the Samba tools nmblookup, net, rpcclient and smbclient. Other than the original tool it allows to export enumeration results
+            as YAML or JSON file, so that it can be further processed with other tools.
+
+            The tool tries to do a 'smart' enumeration. It first checks whether SMB or LDAP is accessible on the target. Depending on the result of this check, it will
+            dynamically skip checks (e.g. LDAP checks if LDAP is not running). If SMB is accessible, it will always check whether a session can be set up or not. If no
+            session can be set up, the tool will stop enumeration.
+
+            The enumeration process can be interupted with CTRL+C. If the options -oJ or -oY are provided, the tool will write out the current enumeration state to the
+            JSON or YAML file, once it receives SIGINT triggered by CTRL+C.
+
+            The tool was made for security professionals and CTF players. Illegal use is prohibited.""")
     parser.add_argument("host")
     parser.add_argument("-A", action="store_true", help="Do all simple enumeration including nmblookup (-U -G -S -P -O -N -I -L). This option is enabled if you don't provide any other option.")
     parser.add_argument("-As", action="store_true", help="Do all simple short enumeration without NetBIOS names lookup (-U -G -S -P -O -I -L)")
