@@ -552,7 +552,7 @@ class EnumNetbios():
             if match:
                 line_val = match.group(1)
                 line_code = match.group(2).upper()
-                line_group = False if match.group(3) else True
+                line_group = not match.group(3)
                 for entry in NBT_INFO:
                     pattern, code, group, desc = entry
                     if pattern:
@@ -1041,7 +1041,7 @@ class EnumOsInfo():
             match = re.search(r".*(Samba\s.*[^)])", server_type_string)
             if match:
                 return  f"Linux/Unix ({match.group(1)})"
-            return  f"Linux/Unix"
+            return  "Linux/Unix"
 
         if os_version in OS_VERSIONS:
             return OS_VERSIONS[os_version]
@@ -1620,7 +1620,7 @@ class EnumShares():
         if enum.retval is None:
             output = process_error(enum.retmsg, ["shares"], module_name, output)
         else:
-            print_info(f"Enumerating shares")
+            print_info("Enumerating shares")
             # This will print success even if no shares were found (which is not an error.)
             print_success(enum.retmsg)
             shares = enum.retval
