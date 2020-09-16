@@ -2459,7 +2459,7 @@ def abort(msg):
     This function is used to abort the tool run on error.
     The given error message will be printed out and the tool will abort with exit code 1.
     '''
-    print(f"\n{Colors.red}[!] {msg + Colors.reset}")
+    print(f"{Colors.red}[!] {msg + Colors.reset}")
     sys.exit(1)
 
 def warn(msg):
