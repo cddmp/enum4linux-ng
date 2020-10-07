@@ -404,16 +404,29 @@ class Output:
 
         # Write JSON/YAML
         if self.out_file is not None:
-            try:
-                f = open(self.out_file, 'w')
-                if self.out_file_type == "json":
-                    f.write(json.dumps(self.out_dict, indent=4))
-                elif self.out_file_type == "yaml":
-                    f.write(yamlize(self.out_dict, rstrip=False))
-                f.close()
-            except OSError:
-                return Result(False, f"Could not write to file {self.out_file}")
+            if "json" in self.out_file_type and not self._write_json():
+                return Result(False, f"Could not write JSON output to {self.out_file}.json")
+            if "yaml" in self.out_file_type and not self._write_yaml():
+                return Result(False, f"Could not write YAML output to {self.out_file}.yaml")
         return Result(True, "")
+
+    def _write_json(self):
+        try:
+            f = open(f"{self.out_file}.json", 'w')
+            f.write(json.dumps(self.out_dict, indent=4))
+            f.close()
+        except OSError:
+            return False
+        return True
+
+    def _write_yaml(self):
+        try:
+            f = open(f"{self.out_file}.yaml", 'w')
+            f.write(yamlize(self.out_dict, rstrip=False))
+            f.close()
+        except OSError:
+            return False
+        return True
 
     def as_dict(self):
         return self.out_dict
@@ -2058,6 +2071,8 @@ class Enumerator():
             output = Output(args.out_json_file, "json")
         elif args.out_yaml_file:
             output = Output(args.out_yaml_file, "yaml")
+        elif args.out_file:
+            output = Output(args.out_file, "json_yaml")
         else:
             output = Output()
 
@@ -2518,6 +2533,7 @@ def check_arguments():
     parser.add_argument("-t", dest="timeout", default=TIMEOUT, help=f"Sets connection timeout in seconds, affects -L, -P, service and session checks (default: {TIMEOUT}s)")
     parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file")
     parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file")
+    parser.add_argument("-oA", dest="out_file", help="Writes output to YAML and JSON file")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
     args = parser.parse_args()
 
