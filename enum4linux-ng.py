@@ -189,7 +189,8 @@ SAMBA_CLIENT_ERRORS = [
 
 # This list will be used by the function nt_status_error_filter() which is typically
 # called after running a Samba client command (see run()). The idea is to filter out
-# common errors.
+# common errors. For very specific status errors, please don't handle them here but
+# in the corresponding enumeration class/function.
 NT_STATUS_COMMON_ERRORS = [
         "STATUS_ACCESS_DENIED",
         "STATUS_LOGON_FAILURE",
@@ -197,6 +198,8 @@ NT_STATUS_COMMON_ERRORS = [
         "STATUS_NETWORK_UNREACHABLE",
         "STATUS_INVALID_PARAMETER",
         "STATUS_NOT_SUPPORTED",
+        # This is a rather strange status which needs more examination and might be
+        # removed from here in the future.
         "STATUS_CONNECTION_DISCONNECTED",
         "WERR_ACCESS_DENIED"
     ]
