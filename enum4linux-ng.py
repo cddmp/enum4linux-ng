@@ -2534,9 +2534,9 @@ def check_arguments():
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for shares")
     parser.add_argument("-t", dest="timeout", default=TIMEOUT, help=f"Sets connection timeout in seconds, affects -L, -P, service and session checks (default: {TIMEOUT}s)")
-    parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file")
-    parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file")
-    parser.add_argument("-oA", dest="out_file", help="Writes output to YAML and JSON file")
+    parser.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file (extension is added automatically)")
+    parser.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file (extension is added automatically)")
+    parser.add_argument("-oA", dest="out_file", help="Writes output to YAML and JSON file (extensions are added automatically)")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
     args = parser.parse_args()
 
