@@ -100,19 +100,22 @@ The tool uses the samba clients tools, namely:
 - rpcclient
 - smbclient
 
-These should be available for nearly all Linux distributions. The package is typically called `smbclient`, `samba-client` or something similar.
+These should be available for all Linux distributions. The package is typically called `smbclient`, `samba-client` or something similar.
 
 In addition, you will need the following Python packages:
 - ldap3
 - PyYaml
 - impacket
 
-For a faster processing of YAML, also install `libyaml`. LibYAML is a YAML parser/emitter written C, which is much faster than its Python implementation. If installed, the tool will automatically use it.
+For a faster processing of YAML, also install:
+- LibYAML
+
+(Fast YAML parser/emitter written in C, will be used automatically if available.)
 
 Some examples for specific Linux distributions installations are listed below. Alternatively, distribution-agnostic ways (python pip, python virtual env and Docker) are possible.
 
 ### Linux distribution specific
-For all distributions below, `libyaml` is already a dependency of the corresponding PyYaml package and will be therefore installed automatically.
+For all distribution examples below, LibYAML is already a dependency of the corresponding PyYaml package and will be therefore installed automatically.
 #### ArchLinux
 
 ```console
