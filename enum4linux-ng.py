@@ -2272,7 +2272,7 @@ class Enumerator():
         if not self.target.services:
             warn("Enumeration will stop here since neither SMB nor LDAP are accessible.")
         elif not self.target.sessions:
-            warn("Enumeration will stop here since no sessions are allowed. Rerun with valid credentials.")
+            warn("Enumeration will stop here since sessions failed. Rerun with valid credentials.")
 
     def prepare_rid_ranges(self):
         '''
