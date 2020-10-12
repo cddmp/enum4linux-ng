@@ -107,9 +107,12 @@ In addition, you will need the following Python packages:
 - PyYaml
 - impacket
 
+For a faster processing of YAML, also install `libyaml`. LibYAML is a YAML parser/emitter written C, which is much faster than its Python implementation. If installed, the tool will automatically use it.
+
 Some examples for specific Linux distributions installations are listed below. Alternatively, distribution-agnostic ways (python pip, python virtual env and Docker) are possible.
 
 ### Linux distribution specific
+For all distributions below, `libyaml` is already a dependency of the corresponding PyYaml package and will be therefore installed automatically.
 #### ArchLinux
 
 ```console
