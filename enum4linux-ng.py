@@ -2269,6 +2269,11 @@ class Enumerator():
             result = BruteForceShares(self.share_brute_params, self.target, self.creds).run()
             self.output.update(result)
 
+        if not self.target.services:
+            warn("Enumeration will stop here since neither SMB nor LDAP are accessible.")
+        elif not self.target.sessions:
+            warn("Enumeration will stop here since no sessions are allowed. Rerun with valid credentials.")
+
     def prepare_rid_ranges(self):
         '''
         Takes a string containing muliple RID ranges and returns a list of ranges as tuples.
