@@ -2304,7 +2304,7 @@ class Enumerator():
 
         # Delete temporary samba config
         if hasattr(self, 'target'):
-            if self.target.samba_config is not None:
+            if self.target.samba_config is not None and not self.args.keep:
                 result = self.target.samba_config.delete()
                 if not result.retval:
                     errors.append(result.retmsg)
@@ -2540,6 +2540,7 @@ def check_arguments():
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for shares")
     parser.add_argument("-t", dest="timeout", default=TIMEOUT, help=f"Sets connection timeout in seconds, affects -L, -P, service and session checks (default: {TIMEOUT}s)")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
+    parser.add_argument("--keep", action="store_true", help="Don't delete the Samba configuration file created during tool run after enumeration (useful with -v)")
     out_group = parser.add_mutually_exclusive_group()
     out_group.add_argument("-oJ", dest="out_json_file", help="Writes output to JSON file (extension is added automatically)")
     out_group.add_argument("-oY", dest="out_yaml_file", help="Writes output to YAML file (extension is added automatically)")
