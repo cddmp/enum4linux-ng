@@ -87,6 +87,7 @@ optional arguments:
   -s SHARES_FILE     Brute force guessing for shares
   -t TIMEOUT         Sets connection timeout in seconds, affects -L, -P, service and session checks (default: 5s)
   -v                 Verbose, show full samba tools commands being run (net, rpcclient, etc.)
+  --keep             Don't delete the Samba configuration file created during tool run after enumeration (useful with -v)
   -oJ OUT_JSON_FILE  Writes output to JSON file (extension is added automatically)
   -oY OUT_YAML_FILE  Writes output to YAML file (extension is added automatically)
   -oA OUT_FILE       Writes output to YAML and JSON file (extensions are added automatically)
