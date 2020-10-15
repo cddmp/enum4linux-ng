@@ -166,8 +166,11 @@ $ source venv/bin/activate
 $ pip install wheel
 $ pip install -r requirements.txt
 ```
+Then run via
+```python3 enum4linux-ng.py -As <target>```
 
 Remember you need to still install the samba tools as mentioned above.
+
 #### Docker
 ```console
 $ git clone https://github.com/cddmp/enum4linux-ng
@@ -175,5 +178,5 @@ $ docker build enum4linux-ng --tag enum4linux-ng
 ```
 Once finished an example run could look like this:
 ```console
-$ docker run -t enum4linux-ng -As 192.168.125.131 
+$ docker run -t enum4linux-ng -As <target>
 ```
