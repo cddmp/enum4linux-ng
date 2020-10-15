@@ -169,7 +169,7 @@ $ pip install -r requirements.txt
 Then run via
 ```python3 enum4linux-ng.py -As <target>```
 
-Remember you need to still install the samba tools as mentioned above.
+Remember you need to still install the samba tools as mentioned above. In addition, make sure you run ```source venv/bin/activate``` everytime you spawn a new shell. Otherwise the wrong Python interpreter with the wrong libraries will be used (your system one rather than the virtual environment one).
 
 #### Docker
 ```console
