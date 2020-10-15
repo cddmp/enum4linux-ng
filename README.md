@@ -135,7 +135,7 @@ For all distribution examples below, LibYAML is already a dependency of the corr
 ```
 
 #### Kali Linux/Debian/Ubuntu 
-(tested on Kali Linux 2020.1, recent Debian versions like Buster should work)
+(tested on Kali Linux 2020.1, recent Debian (e.g. Buster) or Ubuntu versions should work, for Ubuntu 18.04 or below use the Docker or Python virtual environment variant)
 
 ```console
 # apt install smbclient python3-ldap3 python3-yaml python3-impacket
