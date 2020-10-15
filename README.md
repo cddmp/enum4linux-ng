@@ -32,7 +32,7 @@ If you use the tool: Don't use it for illegal purposes.
 ## Run
 1. [Install dependencies](#Installing-dependencies) (various options)
 2. ```$ git clone https://github.com/cddmp/enum4linux-ng && cd enum4linux-ng```
-3. Run, e.g. ```$ ./enum4linux-ng.py -As 192.168.125.131 -oY out```
+3. Run, e.g. ```$ ./enum4linux-ng.py -As <target> -oY out```
 
 If you prefer a Docker based installation, an example run can be found [below](#Docker).
 
