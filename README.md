@@ -180,3 +180,10 @@ Once finished an example run could look like this:
 ```console
 $ docker run -t enum4linux-ng -As <target>
 ```
+## Support
+Occassionally, the tool will spit out error messages like this:
+```Could not <some text here>, please open a GitHub issue```
+
+In that case, please rerun the tool with the ```-v``` and ```--keep``` option. This will allow you to see the exact command which caused the error message. Copy that command, run it in your terminal and redirect the output to a file. Then open a GitHub issue here, pasting the command and attaching the error output file. That helps to debug the issue. Of course, you can debug it yourself and make a pull request.
+
+If the tool is helpful for you, I'm happy if you leave a star!
