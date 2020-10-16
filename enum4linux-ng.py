@@ -70,7 +70,7 @@ import re
 import shutil
 import shlex
 import socket
-import subprocess
+from subprocess import check_output, STDOUT, TimeoutExpired
 import sys
 import tempfile
 from impacket import nmb, smb, smbconnection, smb3, nt_errors
@@ -451,7 +451,7 @@ class ServiceScan():
             if service not in self.scan_list:
                 continue
 
-            print_info(f"Checking {service} (timeout: {self.target.timeout}s)")
+            print_info(f"Checking {service}")
             result = self.check_accessible(service, port)
             if result.retval:
                 print_success(result.retmsg)
@@ -530,7 +530,7 @@ class EnumNetbios():
         Runs nmblookup (a NetBIOS over TCP/IP Client) in order to lookup NetBIOS names information.
         '''
         command = ["nmblookup", "-A", self.target.host]
-        result = run(command, "Trying to get NetBIOS names information")
+        result = run(command, "Trying to get NetBIOS names information", timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not get NetBIOS names information via 'nmblookup': {result.retmsg}")
@@ -600,7 +600,7 @@ class EnumSmb():
         output = {}
 
         for port in self.target.smb_ports:
-            print_info(f"Check for legacy SMBv1 on {port}/tcp (timeout: {self.target.timeout}s)")
+            print_info(f"Check for legacy SMBv1 on {port}/tcp")
             self.target.port = port
             result = self.check_smb1()
             if result.retval is None:
@@ -744,7 +744,7 @@ class EnumSessions():
             session_type = "user"
 
         command = ['smbclient', '-W', self.target.workgroup, f'//{self.target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
-        result = run(command, "Attempting to make session", self.target.samba_config)
+        result = run(command, "Attempting to make session", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(False, f"Could not establish {session_type} session: {result.retmsg}")
@@ -773,9 +773,9 @@ class EnumLdapDomainInfo():
 
         for with_tls in [False, True]:
             if with_tls and SERVICES[SERVICE_LDAPS] in self.target.ldap_ports:
-                print_info(f'Trying LDAPS (timeout: {self.target.timeout}s)')
+                print_info(f'Trying LDAPS')
             elif not with_tls and SERVICES[SERVICE_LDAP] in self.target.ldap_ports:
-                print_info(f'Trying LDAP (timeout: {self.target.timeout}s)')
+                print_info(f'Trying LDAP')
             self.target.tls = with_tls
             namingcontexts = self.get_namingcontexts()
             if namingcontexts.retval is not None:
@@ -920,7 +920,7 @@ class EnumLsaqueryDomainInfo():
         (SID).
         '''
         command = ['rpcclient', '-W', self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', self.target.host, '-c', 'lsaquery']
-        result = run(command, "Attempting to get domain SID", self.target.samba_config)
+        result = run(command, "Attempting to get domain SID", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not get domain information via 'lsaquery': {result.retmsg}")
@@ -1006,7 +1006,7 @@ class EnumOsInfo():
         '''
 
         command = ["rpcclient", "-W", self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', '-c', 'srvinfo', self.target.host]
-        result = run(command, "Attempting to get OS info with command", self.target.samba_config)
+        result = run(command, "Attempting to get OS info with command", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not get OS info via 'srvinfo': {result.retmsg}")
@@ -1133,7 +1133,7 @@ class EnumUsersRpc():
         description of the account.
         '''
         command = ['rpcclient', '-W', self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', '-c', 'querydispinfo', self.target.host]
-        result = run(command, "Attempting to get userlist", self.target.samba_config)
+        result = run(command, "Attempting to get userlist", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not find users via 'querydispinfo': {result.retmsg}")
@@ -1148,7 +1148,7 @@ class EnumUsersRpc():
         1 enumeration is no longer possible.
         '''
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "enumdomusers", self.target.host]
-        result = run(command, "Attempting to get userlist", self.target.samba_config)
+        result = run(command, "Attempting to get userlist", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not find users via 'enumdomusers': {result.retmsg}")
@@ -1214,7 +1214,7 @@ class EnumUsersRpc():
 
         details = OrderedDict()
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"queryuser {rid}", self.target.host]
-        result = run(command, "Attempting to get detailed user info", self.target.samba_config)
+        result = run(command, "Attempting to get detailed user info", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not find details for user '{name}': {result.retmsg}")
@@ -1365,7 +1365,7 @@ class EnumGroupsRpc():
             return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
 
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"{grouptype_dict[grouptype]}", self.target.host]
-        result = run(command, f"Attempting to get {grouptype} groups", self.target.samba_config)
+        result = run(command, f"Attempting to get {grouptype} groups", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': {result.retmsg}")
@@ -1378,7 +1378,7 @@ class EnumGroupsRpc():
         the 'net rpc group members' command.
         '''
         command = ["net", "rpc", "group", "members", groupname, "-W", self.target.workgroup, "-I", self.target.host, "-U", f"{self.creds.user}%{self.creds.pw}"]
-        result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
+        result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not lookup members for {grouptype} group '{groupname}' (RID {rid}): {result.retmsg}")
@@ -1403,7 +1403,7 @@ class EnumGroupsRpc():
 
         details = OrderedDict()
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f'{self.creds.user}%{self.creds.pw}', "-c", f"querygroup {rid}", self.target.host]
-        result = run(command, "Attempting to get detailed group info", self.target.samba_config)
+        result = run(command, "Attempting to get detailed group info", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not find details for {grouptype} group '{groupname}': {result.retmsg}")
@@ -1550,7 +1550,7 @@ class RidCycling():
         # Try to get a valid SID from well-known user names
         for known_username in users.split(','):
             command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"lookupnames {known_username}", self.target.host]
-            result = run(command, f"Attempting to get SID for user {known_username}", self.target.samba_config, error_filter=False)
+            result = run(command, f"Attempting to get SID for user {known_username}", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
             sid_string = result.retmsg
 
             #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
@@ -1567,7 +1567,7 @@ class RidCycling():
         #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
         # Try to get SID list via lsaenumsid
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "lsaenumsid", self.target.host]
-        result = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config, error_filter=False)
+        result = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
 
         if "NT_STATUS_ACCESS_DENIED" not in result.retmsg:
             for pattern in sid_patterns_list:
@@ -1590,7 +1590,7 @@ class RidCycling():
             #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
             for rid in range(start_rid, end_rid+1):
                 command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", self.target.host, "-c", f"lookupsids {sid}-{rid}"]
-                result = run(command, "RID Cycling", self.target.samba_config, error_filter=False)
+                result = run(command, "RID Cycling", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
 
                 # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
                 match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", result.retmsg)
@@ -1662,7 +1662,7 @@ class EnumShares():
         it calls the NetShareEnumAll() to get a list of shares.
         '''
         command = ["smbclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-L", f"//{self.target.host}"]
-        result = run(command, "Attempting to get share list using authentication", self.target.samba_config)
+        result = run(command, "Attempting to get share list using authentication", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
             return Result(None, f"Could not list shares: {result.retmsg}")
@@ -1694,7 +1694,7 @@ class EnumShares():
         In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
         '''
         command = ["smbclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", f"//{self.target.host}/{share}", "-c", "dir"]
-        result = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config, error_filter=False)
+        result = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
 
         if "NT_STATUS_BAD_NETWORK_NAME" in result.retmsg:
             return Result(None, "Share doesn't exist")
@@ -1798,7 +1798,7 @@ class EnumPolicy():
         output = {}
 
         for port in self.target.smb_ports:
-            print_info(f"Trying port {port}/tcp (timeout: {self.target.timeout}s)")
+            print_info(f"Trying port {port}/tcp")
             self.target.port = port
             enum = self.enum()
             if enum.retval is None:
@@ -1997,7 +1997,7 @@ class EnumPrinters():
         Tries to enum printer via rpcclient's enumprinters.
         '''
         command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "enumprinters", self.target.host]
-        result = run(command, "Attempting to get printer info", self.target.samba_config)
+        result = run(command, "Attempting to get printer info", self.target.samba_config, timeout=self.target.timeout)
         printers = {}
 
         if not result.retval:
@@ -2051,7 +2051,7 @@ class EnumServices():
         Tries to enum services via net rpc serivce list.
         '''
         command = ["net", "rpc", "service", "list", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-I", self.target.host]
-        result = run(command, "Attempting to get services", self.target.samba_config)
+        result = run(command, "Attempting to get services", self.target.samba_config, timeout=self.target.timeout)
         services = {}
 
         if not result.retval:
@@ -2121,6 +2121,7 @@ class Enumerator():
         print_info(f"Username ......... '{self.creds.user}'")
         print_info(f"Random Username .. '{self.creds.random_user}'")
         print_info(f"Password ......... '{self.creds.pw}'")
+        print_info(f"Timeout .......... {self.target.timeout} seconds")
         if self.args.R:
             print_info(f"RID Range(s) ..... {self.args.ranges}")
             print_info(f"Known Usernames .. '{self.args.users}'")
@@ -2328,7 +2329,7 @@ class Enumerator():
 
 ###
 
-def run(command, description="", samba_config=None, error_filter=True):
+def run(command, description="", samba_config=None, error_filter=True, timeout=None):
     '''
     Runs a samba client command (net, nmblookup, smbclient or rpcclient) and does some basic output filtering.
     The samba_config parameter allows to pass in a custom samba config, this allows to modify the behaviour of
@@ -2341,8 +2342,10 @@ def run(command, description="", samba_config=None, error_filter=True):
         print_verbose(f"{description}, running command: {' '.join(shlex.quote(x) for x in command)}")
 
     try:
-        output = subprocess.check_output(command, shell=False, stderr=subprocess.STDOUT)
+        output = check_output(command, shell=False, stderr=STDOUT, timeout=timeout)
         retval = 0
+    except TimeoutExpired:
+        return Result(False, "timed out")
     except Exception as e:
         output = e.output
         retval = 1
