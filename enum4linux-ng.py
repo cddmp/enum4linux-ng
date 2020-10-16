@@ -2274,9 +2274,12 @@ class Enumerator():
             self.output.update(result)
 
         if not self.target.services:
-            warn("Enumeration will stop here since neither SMB nor LDAP are accessible.")
+            warn("Aborting remainder of tests since neither SMB nor LDAP are accessible")
         elif not self.target.sessions:
-            warn("Enumeration will stop here since sessions failed. Rerun with valid credentials.")
+            if not 'SMB' in self.target.services:
+                warn("Aborting remainder of tests since SMB is not accessible")
+            else:
+                warn("Aborting remainder of tests since sessions failed, rerun with valid credentials")
 
     def prepare_rid_ranges(self):
         '''
