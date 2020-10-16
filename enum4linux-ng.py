@@ -1572,9 +1572,9 @@ class RidCycling():
         if "NT_STATUS_ACCESS_DENIED" not in result.retmsg:
             for pattern in sid_patterns_list:
                 match_list = re.findall(pattern, result.retmsg)
-                for result in match_list:
-                    if result not in sids:
-                        sids.append(result)
+                for match in match_list:
+                    if match not in sids:
+                        sids.append(match)
 
         if sids:
             return Result(sids, f"Found {len(sids)} SID(s)")
