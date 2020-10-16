@@ -93,7 +93,7 @@ optional arguments:
   -k USERS           User(s) that exists on remote system (default: administrator,guest,krbtgt,domain admins,root,bin,none). Used to get sid with "lookupsid known_username"
   -r RANGES          RID ranges to enumerate (default: 500-550,1000-1050)
   -s SHARES_FILE     Brute force guessing for shares
-  -t TIMEOUT         Sets connection timeout in seconds, affects -L, -P, service and session checks (default: 5s)
+  -t TIMEOUT         Sets connection timeout in seconds (default: 5s)
   -v                 Verbose, show full samba tools commands being run (net, rpcclient, etc.)
   --keep             Don't delete the Samba configuration file created during tool run after enumeration (useful with -v)
   -oJ OUT_JSON_FILE  Writes output to JSON file (extension is added automatically)
