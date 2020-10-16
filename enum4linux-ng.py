@@ -2277,7 +2277,7 @@ class Enumerator():
         if not self.target.services:
             warn("Aborting remainder of tests since neither SMB nor LDAP are accessible")
         elif not self.target.sessions:
-            if not 'SMB' in self.target.services:
+            if SERVICE_SMB not in self.target.services and SERVICE_SMB_NETBIOS not in self.target.services:
                 warn("Aborting remainder of tests since SMB is not accessible")
             else:
                 warn("Aborting remainder of tests since sessions failed, rerun with valid credentials")
