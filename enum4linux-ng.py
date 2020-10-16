@@ -2548,7 +2548,7 @@ def check_arguments():
     parser.add_argument("-k", dest="users", default=KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {KNOWN_USERNAMES}).\nUsed to get sid with "lookupsid known_username"')
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for shares")
-    parser.add_argument("-t", dest="timeout", default=TIMEOUT, help=f"Sets connection timeout in seconds, affects -L, -P, service and session checks (default: {TIMEOUT}s)")
+    parser.add_argument("-t", dest="timeout", default=TIMEOUT, help=f"Sets connection timeout in seconds (default: {TIMEOUT}s)")
     parser.add_argument("-v", dest="verbose", action="store_true", help="Verbose, show full samba tools commands being run (net, rpcclient, etc.)")
     parser.add_argument("--keep", action="store_true", help="Don't delete the Samba configuration file created during tool run after enumeration (useful with -v)")
     out_group = parser.add_mutually_exclusive_group()
