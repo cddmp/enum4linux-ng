@@ -2121,7 +2121,7 @@ class Enumerator():
         print_info(f"Username ......... '{self.creds.user}'")
         print_info(f"Random Username .. '{self.creds.random_user}'")
         print_info(f"Password ......... '{self.creds.pw}'")
-        print_info(f"Timeout .......... {self.target.timeout} seconds")
+        print_info(f"Timeout .......... {self.target.timeout} second(s)")
         if self.args.R:
             print_info(f"RID Range(s) ..... {self.args.ranges}")
             print_info(f"Known Usernames .. '{self.args.users}'")
