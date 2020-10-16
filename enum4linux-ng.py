@@ -743,8 +743,8 @@ class EnumSessions():
             pw = creds.pw
             session_type = "user"
 
-        command = ['smbclient', '-W', self.target.workgroup, f'//{self.target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
-        result = run(command, "Attempting to make session", self.target.samba_config, timeout=self.target.timeout)
+        command = ['smbclient', '-t', f"{self.target.timeout}", '-W', self.target.workgroup, f'//{self.target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
+        result = run(command, "Attempting to make session", self.target.samba_config)
 
         if not result.retval:
             return Result(False, f"Could not establish {session_type} session: {result.retmsg}")
@@ -1377,8 +1377,8 @@ class EnumGroupsRpc():
         Takes a group name as first argument and tries to enumerate the group members. This is don by using
         the 'net rpc group members' command.
         '''
-        command = ["net", "rpc", "group", "members", groupname, "-W", self.target.workgroup, "-I", self.target.host, "-U", f"{self.creds.user}%{self.creds.pw}"]
-        result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config, timeout=self.target.timeout)
+        command = ["net", "rpc", "group", "members", groupname, "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-I", self.target.host, "-U", f"{self.creds.user}%{self.creds.pw}"]
+        result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
 
         if not result.retval:
             return Result(None, f"Could not lookup members for {grouptype} group '{groupname}' (RID {rid}): {result.retmsg}")
@@ -1661,8 +1661,8 @@ class EnumShares():
         smbclient will open a connection to the Server Service Remote Protocol named pipe (srvsvc). Once connected
         it calls the NetShareEnumAll() to get a list of shares.
         '''
-        command = ["smbclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-L", f"//{self.target.host}"]
-        result = run(command, "Attempting to get share list using authentication", self.target.samba_config, timeout=self.target.timeout)
+        command = ["smbclient", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-L", f"//{self.target.host}"]
+        result = run(command, "Attempting to get share list using authentication", self.target.samba_config)
 
         if not result.retval:
             return Result(None, f"Could not list shares: {result.retmsg}")
@@ -1693,8 +1693,8 @@ class EnumShares():
         In order to enumerate access permissions, smbclient is used with the "dir" command.
         In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
         '''
-        command = ["smbclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", f"//{self.target.host}/{share}", "-c", "dir"]
-        result = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
+        command = ["smbclient", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", f"//{self.target.host}/{share}", "-c", "dir"]
+        result = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config, error_filter=False)
 
         if "NT_STATUS_BAD_NETWORK_NAME" in result.retmsg:
             return Result(None, "Share doesn't exist")
@@ -2050,8 +2050,8 @@ class EnumServices():
         '''
         Tries to enum services via net rpc serivce list.
         '''
-        command = ["net", "rpc", "service", "list", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-I", self.target.host]
-        result = run(command, "Attempting to get services", self.target.samba_config, timeout=self.target.timeout)
+        command = ["net", "rpc", "service", "list", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-I", self.target.host]
+        result = run(command, "Attempting to get services", self.target.samba_config)
         services = {}
 
         if not result.retval:
