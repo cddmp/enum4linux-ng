@@ -1894,10 +1894,14 @@ class EnumPolicy():
 
         try:
             resp = samr.hSamrConnect2(dce)
-        except Exception:
-            return Result((None, None), f"SamrConnect2() call failed on port {self.target.port}/tcp")
+        except Exception as e:
+            nt_status_error = nt_status_error_filter(str(e))
+            if nt_status_error:
+                return Result((None, None), f"SamrConnect2 call failed on port {self.target.port}/tcp: {nt_status_error}")
+            return Result((None, None), f"SamrConnect2 call failed on port {self.target.port}/tcp")
+
         if resp['ErrorCode'] != 0:
-            return Result((None, None), f"SamrConnect2() call failed on port {self.target.port}/tcp")
+            return Result((None, None), f"SamrConnect2 call failed on port {self.target.port}/tcp")
 
         resp2 = samr.hSamrEnumerateDomainsInSamServer(dce, serverHandle=resp['ServerHandle'], enumerationContext=0, preferedMaximumLength=500)
         if resp2['ErrorCode'] != 0:
