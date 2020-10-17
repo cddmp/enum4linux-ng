@@ -115,7 +115,7 @@ In addition, you will need the following Python packages:
 - PyYaml
 - impacket
 
-For a faster processing of YAML, also install (should come as a dependcy for PyYaml for most Linux distributions):
+For a faster processing of YAML (optional!) also install (should come as a dependcy for PyYaml for most Linux distributions):
 - LibYAML
 
 Some examples for specific Linux distributions installations are listed below. Alternatively, distribution-agnostic ways (python pip, python virtual env and Docker) are possible.
@@ -166,7 +166,8 @@ $ source venv/bin/activate
 $ pip install wheel
 $ pip install -r requirements.txt
 ```
-Then run via
+Then run via:
+
 ```python3 enum4linux-ng.py -As <target>```
 
 Remember you need to still install the samba tools as mentioned above. In addition, make sure you run ```source venv/bin/activate``` everytime you spawn a new shell. Otherwise the wrong Python interpreter with the wrong libraries will be used (your system one rather than the virtual environment one).
@@ -180,7 +181,7 @@ Once finished an example run could look like this:
 ```console
 $ docker run -t enum4linux-ng -As <target>
 ```
-## Support
+## Contribution and Support
 Occassionally, the tool will spit out error messages like this:
 
 ```Could not <some text here>, please open a GitHub issue```
