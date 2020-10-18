@@ -699,7 +699,7 @@ class EnumSessions():
         if user_session.retval:
             output["random_user_session_possible"] = True
             print_success(user_session.retmsg)
-            print_hint(f"Rerunning enumeration with user '{self.creds.random_user}' might give more results.")
+            print_hint(f"Rerunning enumeration with user '{self.creds.random_user}' might give more results")
         else:
             output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
 
@@ -2011,7 +2011,7 @@ class EnumPrinters():
         if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in result.retmsg:
             return Result("", "No printers available")
         if "No printers returned." in result.retmsg:
-            return Result({}, "No printers returned (this is not an error).")
+            return Result({}, "No printers returned (this is not an error)")
 
         match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", result.retmsg, re.MULTILINE)
         if not match_list:
