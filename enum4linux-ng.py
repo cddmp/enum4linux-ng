@@ -772,9 +772,13 @@ class EnumLdapDomainInfo():
                   "long_domain":None}
 
         for with_tls in [False, True]:
-            if with_tls and SERVICES[SERVICE_LDAPS] in self.target.ldap_ports:
+            if with_tls:
+                if SERVICES[SERVICE_LDAPS] not in self.target.ldap_ports:
+                    continue
                 print_info(f'Trying LDAPS')
-            elif not with_tls and SERVICES[SERVICE_LDAP] in self.target.ldap_ports:
+            else:
+                if SERVICES[SERVICE_LDAP] not in self.target.ldap_ports:
+                    continue
                 print_info(f'Trying LDAP')
             self.target.tls = with_tls
             namingcontexts = self.get_namingcontexts()
