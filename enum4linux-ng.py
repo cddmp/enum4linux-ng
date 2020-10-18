@@ -699,7 +699,7 @@ class EnumSessions():
         if user_session.retval:
             output["random_user_session_possible"] = True
             print_success(user_session.retmsg)
-            print_success(f"Rerunning enumeration with user '{self.creds.random_user}' might give more results.")
+            print_hint(f"Rerunning enumeration with user '{self.creds.random_user}' might give more results.")
         else:
             output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
 
@@ -2457,6 +2457,9 @@ def print_heading(text, leading_newline=True):
 
 def print_success(msg):
     print(f"{Colors.green}[+] {msg + Colors.reset}")
+
+def print_hint(msg):
+    print(f"{Colors.green}[H] {msg + Colors.reset}")
 
 def print_error(msg):
     print(f"{Colors.red}[-] {msg + Colors.reset}")
