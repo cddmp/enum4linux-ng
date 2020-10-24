@@ -24,8 +24,14 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 - IPv6 support (experimental)
 
 ## Credits
-I'd like to give credit to Mark Lowe for creating the original enum4linux.pl. In addition, I'd like to thank and give credit to Wh1t3Fox for creating polenum.
-It was lots of fun reading your code. :)
+I'd like to thank and give credit to the people at former Portcullis Labs (now Cisco CX Security Labs), namely:
+- Mark Lowe for creating the original 'enum4linux.pl' (https://github.com/CiscoCXSecurity/enum4linux)
+- Richard "deanx" Dean for creating the original 'polenum' (https://labs.portcullis.co.uk/tools/polenum/)
+
+In addition, I'd like to thank and give credit to:
+- Craig "Wh1t3Fox" West for his fork of 'polenum' (https://github.com/Wh1t3Fox/polenum)
+
+It was lots of fun reading your code! :)
 
 ## Legal note
 If you use the tool: Don't use it for illegal purposes.

@@ -3,7 +3,7 @@
 # pylint: disable=C0301, E1101
 
 ### ENUM4LINUX-NG
-# This tool is a rewrite of Mark Lowe's (former Portcullis Labs, now CiscoCXSecurity ) enum4linux.pl,
+# This tool is a rewrite of Mark Lowe's (former Portcullis Labs, now Cisco CX Security Labs ) enum4linux.pl,
 # a tool for enumerating information from Windows and Samba systems.
 # As the original enum4linux.pl, this tool is mainly a wrapper around the Samba tools 'nmblookup', 'net',
 # 'rpcclient' and 'smbclient'. Other than the original enum4linux.pl, enum4linux-ng parses all output of
@@ -12,8 +12,18 @@
 # natively implemented in enum4linux-ng. Console output is colored.
 #
 ### CREDITS
-# I'd like to thank and give credit to Mark Lowe for creating the original 'enum4linux.pl'.
-# In addition, I'd like to thank and give credit to Wh1t3Fox for creating 'polenum'.
+# I'd like to thank and give credit to the people at former Portcullis Labs (now Cisco CX Security Labs), namely:
+#
+# - Mark Lowe for creating the original 'enum4linux.pl'
+#   https://github.com/CiscoCXSecurity/enum4linux
+#
+# - Richard "deanx" Dean for creating the original 'polenum'
+#   https://labs.portcullis.co.uk/tools/polenum/
+#
+# In addition, I'd like to thank and give credit to:
+# - Craig "Wh1t3Fox" West for his fork of 'polenum'
+#   https://github.com/Wh1t3Fox/polenum
+#
 #
 ### DESIGN
 #
@@ -1815,8 +1825,9 @@ class EnumPolicy():
 
         return output
 
-    # This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
-    # All credits to Wh1t3Fox!
+    # This function is heavily based on this polenum fork: https://github.com/Wh1t3Fox/polenum
+    # The original polenum was written by Richard "deanx" Dean: https://labs.portcullis.co.uk/tools/polenum/
+    # All credits to Richard "deanx" Dean and Craig "Wh1t3Fox" West!
     def enum(self):
         '''
         Tries to enum password policy and domain lockout and logoff information by opening a connection to the SAMR
@@ -1880,8 +1891,9 @@ class EnumPolicy():
 
         return Result(policy, f"Found policy:\n{yamlize(policy)}")
 
-    # This function is heavily based on the polenum.py source code: https://github.com/Wh1t3Fox/polenum
-    # All credits to Wh1t3Fox!
+    # This function is heavily based on this polenum fork: https://github.com/Wh1t3Fox/polenum
+    # The original polenum was written by Richard "deanx" Dean: https://labs.portcullis.co.uk/tools/polenum/
+    # All credits to Richard "deanx" Dean and Craig "Wh1t3Fox" West!
     def samr_init(self):
         '''
         Tries to connect to the SAMR named pipe and get the domain handle.
@@ -1924,8 +1936,9 @@ class EnumPolicy():
 
         return Result((dce, domain_handle), "")
 
-    # This function was copied (slightly modified) from the polenum.py source code: https://github.com/Wh1t3Fox/polenum
-    # All credits to Wh1t3Fox!
+    # This function is heavily based on this polenum fork: https://github.com/Wh1t3Fox/polenum
+    # The original polenum was written by Richard "deanx" Dean: https://labs.portcullis.co.uk/tools/polenum/
+    # All credits to Richard "deanx" Dean and Craig "Wh1t3Fox" West!
     def policy_to_human(self, low, high, lockout=False):
         '''
         Converts various values retrieved via the SAMR named pipe into human readable strings.
