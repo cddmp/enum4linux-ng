@@ -9,7 +9,8 @@
 # 'rpcclient' and 'smbclient'. Other than the original enum4linux.pl, enum4linux-ng parses all output of
 # the previously mentioned commands and (if the user requests so), fills the data in JSON/YAML output.
 # The original enum4linux.pl had the additional dependencies 'ldapsearch' and 'polenum.py'. These are
-# natively implemented in enum4linux-ng. Console output is colored.
+# natively implemented in enum4linux-ng. Console output is colored (can be deactivated by setting the
+# environment variable NO_COLOR to an arbitrary value).
 #
 ### CREDITS
 # I'd like to thank and give credit to the people at former Portcullis Labs (now Cisco CX Security Labs), namely:
@@ -256,15 +257,40 @@ RID_RANGES = "500-550,1000-1050"
 KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
 TIMEOUT = 5
 
-# global_verbose is the only global variable which should be written to
+# global_verbose and global_colors should be the only variables which should be written to
 global_verbose = False
+global_colors = True
 
 class Colors:
-    reset = '\033[0m'
-    red = '\033[91m'
-    green = '\033[92m'
-    yellow = '\033[93m'
-    blue = '\033[94m'
+    ansi_reset = '\033[0m'
+    ansi_red = '\033[91m'
+    ansi_green = '\033[92m'
+    ansi_yellow = '\033[93m'
+    ansi_blue = '\033[94m'
+
+    @classmethod
+    def red(cls, msg):
+        if global_colors:
+            return f"{cls.ansi_red}{msg}{cls.ansi_reset}"
+        return msg
+
+    @classmethod
+    def green(cls, msg):
+        if global_colors:
+            return f"{cls.ansi_green}{msg}{cls.ansi_reset}"
+        return msg
+
+    @classmethod
+    def yellow(cls, msg):
+        if global_colors:
+            return f"{cls.ansi_yellow}{msg}{cls.ansi_reset}"
+        return msg
+
+    @classmethod
+    def blue(cls, msg):
+        if global_colors:
+            return f"{cls.ansi_blue}{msg}{cls.ansi_reset}"
+        return msg
 
 class Result:
     '''
@@ -2456,7 +2482,7 @@ def valid_workgroup(workgroup):
 ### Print Functions and Error Processing
 
 def print_banner():
-    print(f"{Colors.green}ENUM4LINUX - next generation{Colors.reset}\n")
+    print(f"{Colors.green('ENUM4LINUX - next generation')}\n")
 
 def print_heading(text, leading_newline=True):
     output = f"|    {text}    |"
@@ -2469,16 +2495,16 @@ def print_heading(text, leading_newline=True):
     print(" " + "="*(length-2))
 
 def print_success(msg):
-    print(f"{Colors.green}[+] {msg + Colors.reset}")
+    print(Colors.green(f"[+] {msg}"))
 
 def print_hint(msg):
-    print(f"{Colors.green}[H] {msg + Colors.reset}")
+    print(Colors.green(f"[H] {msg}"))
 
 def print_error(msg):
-    print(f"{Colors.red}[-] {msg + Colors.reset}")
+    print(Colors.red(f"[-] {msg}"))
 
 def print_info(msg):
-    print(f"{Colors.blue}[*] {msg + Colors.reset}")
+    print(Colors.blue(f"[*] {msg}"))
 
 def print_verbose(msg):
     print(f"[V] {msg}")
@@ -2513,11 +2539,11 @@ def abort(msg):
     This function is used to abort the tool run on error.
     The given error message will be printed out and the tool will abort with exit code 1.
     '''
-    print(f"{Colors.red}[!] {msg + Colors.reset}")
+    print(Colors.red(f"[!] {msg}"))
     sys.exit(1)
 
 def warn(msg):
-    print(f"\n{Colors.yellow}[!] {msg + Colors.reset}")
+    print("\n"+Colors.yellow(f"[!] {msg}"))
 
 def yamlize(msg, sort=False, rstrip=True):
     result = yaml.dump(msg, default_flow_style=False, sort_keys=sort, Dumper=Dumper)
@@ -2534,6 +2560,7 @@ def check_arguments():
     '''
 
     global global_verbose
+    global global_colors
 
     parser = ArgumentParser(description="""This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems.
             It is mainly a wrapper around the Samba tools nmblookup, net, rpcclient and smbclient. Other than the original tool it allows to export enumeration results
@@ -2640,6 +2667,11 @@ def check_dependencies():
 ### Run!
 
 def main():
+    # The user can disable colored output via environment variable NO_COLOR (see https://no-color.org)
+    global global_colors
+    if "NO_COLOR" in os.environ:
+        global_colors = False
+
     print_banner()
 
     # Check dependencies and process arguments, make sure yaml can handle OrdereDicts
