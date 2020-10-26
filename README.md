@@ -24,7 +24,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 - IPv6 support (experimental)
 
 ## Differences
-Some things are implemented differently, than in the original enum4linux. These are the important differences:
+Some things are implemented differently compared to the original enum4linux. These are the important differences:
 - RID cycling is not part of the default enumeration (```-A```) but can be enabled with ```-R```
 
 ## Credits
