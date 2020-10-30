@@ -26,6 +26,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 ## Differences
 Some things are implemented differently compared to the original enum4linux. These are the important differences:
 - RID cycling is not part of the default enumeration (```-A```) but can be enabled with ```-R```
+- parameter naming is slightly different (e.g. ```-A``` instead of ```-a```)
 
 ## Credits
 I'd like to thank and give credit to the people at former Portcullis Labs (now Cisco CX Security Labs), namely:
