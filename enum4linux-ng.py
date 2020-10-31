@@ -2546,7 +2546,7 @@ def warn(msg):
     print("\n"+Colors.yellow(f"[!] {msg}"))
 
 def yamlize(msg, sort=False, rstrip=True):
-    result = yaml.dump(msg, default_flow_style=False, sort_keys=sort, Dumper=Dumper)
+    result = yaml.dump(msg, default_flow_style=False, sort_keys=sort, width=160, Dumper=Dumper)
     if rstrip:
         return result.rstrip()
     return result
