@@ -212,7 +212,10 @@ NT_STATUS_COMMON_ERRORS = [
         # This is a rather strange status which needs more examination and might be
         # removed from here in the future.
         "STATUS_CONNECTION_DISCONNECTED",
-        "WERR_ACCESS_DENIED"
+        "WERR_ACCESS_DENIED",
+        # This error code is from the depths of CIFS/SMBv1
+        # https://tools.ietf.org/id/draft-leach-cifs-v1-spec-01.txt
+        "ERRSRV:ERRaccess"
     ]
 
 # Mapping from errno to string for socket errors we often come across
