@@ -560,7 +560,7 @@ class EnumNetbios():
             print_success(result.retmsg)
             output["nmblookup"] = result.retval
         else:
-            output = process_error(nmblookup.retmsg, ["nmblookup","workgroup"], module_name, output)
+            output = process_error(nmblookup.retmsg, ["nmblookup", "workgroup"], module_name, output)
 
         return output
 
