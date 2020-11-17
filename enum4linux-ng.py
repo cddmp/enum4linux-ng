@@ -1124,8 +1124,8 @@ class EnumUsersRpc():
         print_heading(f"Users via RPC on {self.target.host}")
         output = {}
 
-        print_info("Enumerating users")
         # Get user via querydispinfo
+        print_info("Enumerating users via 'querydispinfo'")
         users_qdi = self.enum_from_querydispinfo()
         if users_qdi.retval is None:
             output = process_error(users_qdi.retmsg, ["users"], module_name, output)
@@ -1135,6 +1135,7 @@ class EnumUsersRpc():
             users_qdi_output = users_qdi.retval
 
         # Get user via enumdomusers
+        print_info("Enumerating users via 'enumdomusers'")
         users_edu = self.enum_from_enumdomusers()
         if users_edu.retval is None:
             output = process_error(users_edu.retmsg, ["users"], module_name, output)
@@ -1310,8 +1311,8 @@ class EnumGroupsRpc():
         output = {}
         groups = None
 
-        print_info("Enumerating groups")
         for grouptype in ["local", "builtin", "domain"]:
+            print_info(f"Enumerating {grouptype} groups")
             enum = self.enum(grouptype)
             if enum.retval is None:
                 output = process_error(enum.retmsg, ["groups"], module_name, output)
