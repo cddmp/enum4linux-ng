@@ -1498,7 +1498,7 @@ class RidCycleParams:
         if "domain_sid" in enum_input and enum_input["domain_sid"] and "NULL SID" not in enum_input["domain_sid"]:
             self.enumerated_input["domain_sid"] = enum_input["domain_sid"]
         else:
-            self.enumerated_input["domain_sid"] = ""
+            self.enumerated_input["domain_sid"] = None
 
 class RidCycling():
     def __init__(self, cycle_params, target, creds, detailed):
