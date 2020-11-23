@@ -15,7 +15,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 
 ## Features
 - support for YAML and JSON output
-- colored console output
+- colored console output (can be disabled via [NO_COLOR](https://no-color.org/))
 - ldapsearch und polenum are natively implemented
 - support for legacy SMBv1 connections
 - auto detection of IPC signing support
