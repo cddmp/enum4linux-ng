@@ -991,7 +991,7 @@ class EnumLsaqueryDomainInfo():
         '''
         Takes the result of rpclient's lsaquery command and tries to extract the domain SID.
         '''
-        domain_sid = ""
+        domain_sid = None
         if "Domain Sid: (NULL SID)" in lsaquery_result:
             domain_sid = "NULL SID"
         else:
@@ -1495,7 +1495,7 @@ class RidCycleParams:
             else:
                 self.enumerated_input[key] = None
 
-        if "domain_sid" in enum_input and "NULL SID" not in enum_input["domain_sid"]:
+        if "domain_sid" in enum_input and enum_input["domain_sid"] and "NULL SID" not in enum_input["domain_sid"]:
             self.enumerated_input["domain_sid"] = enum_input["domain_sid"]
         else:
             self.enumerated_input["domain_sid"] = ""
