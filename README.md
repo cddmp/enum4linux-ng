@@ -14,7 +14,7 @@ enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs now Cisco C
 I made it for educational purposes for myself and to overcome issues with enum4linux.pl. It has the same functionality as the original tool (though it does some things [differently](#Differences)). Other than the original tool it parses all output of the Samba tools and allows to export all findings as YAML or JSON file. The idea behind this is to allow other tools to import the findings and further process them. It is planned to add new features in the future.
 
 ## Features
-- support for YAML and JSON output
+- support for YAML and JSON export
 - colored console output (can be disabled via [NO_COLOR](https://no-color.org/))
 - ldapsearch und polenum are natively implemented
 - support for legacy SMBv1 connections
@@ -31,10 +31,10 @@ Some things are implemented differently compared to the original enum4linux. The
 ## Credits
 I'd like to thank and give credit to the people at former Portcullis Labs (now Cisco CX Security Labs), namely:
 - Mark Lowe for creating the original 'enum4linux.pl' (https://github.com/CiscoCXSecurity/enum4linux)
-- Richard "deanx" Dean for creating the original 'polenum' (https://labs.portcullis.co.uk/tools/polenum/)
+- Richard 'deanx' Dean for creating the original 'polenum' (https://labs.portcullis.co.uk/tools/polenum/)
 
 In addition, I'd like to thank and give credit to:
-- Craig "Wh1t3Fox" West for his fork of 'polenum' (https://github.com/Wh1t3Fox/polenum)
+- Craig 'Wh1t3Fox' West for his fork of 'polenum' (https://github.com/Wh1t3Fox/polenum)
 
 It was lots of fun reading your code! :)
 
@@ -57,7 +57,7 @@ A user 'Tester' with password 'Start123!' was created. Firewall access was allow
 
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo1.gif)
 
-The second demo shows a run against Metasploitable2. The following command is being used:
+The second demo shows a run against Metasploitable 2. The following command is being used:
 
 ```enum4linux-ng.py 192.168.125.145 -A -C```
 
@@ -127,7 +127,7 @@ In addition, you will need the following Python packages:
 - PyYaml
 - impacket
 
-For a faster processing of YAML (optional!) also install (should come as a dependcy for PyYaml for most Linux distributions):
+For a faster processing of YAML (optional!) also install (should come as a dependency for PyYaml for most Linux distributions):
 - LibYAML
 
 Some examples for specific Linux distributions installations are listed below. Alternatively, distribution-agnostic ways (python pip, python virtual env and Docker) are possible.
