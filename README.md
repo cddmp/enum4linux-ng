@@ -153,6 +153,13 @@ For all distribution examples below, LibYAML is already a dependency of the corr
 # apt install smbclient python3-ldap3 python3-yaml python3-impacket
 ```
 
+#### NixOS
+(tested on NixOS 20.9)
+
+```console
+$ nix-env -iA nixos.enum4linux-ng
+```
+
 ### Linux distribution-agnostic
 #### Python pip
 Depending on the Linux distribution either `pip3` or `pip` is needed:
