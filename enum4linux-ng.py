@@ -1206,7 +1206,7 @@ class EnumOsInfo():
                 return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
 
         # For SMBv1 we can typically find the "Native OS" (e.g. "Windows 5.1")  and "Native LAN Manager"
-        # (e.g. "Windows 2000 LAN Manager" field in the "Session Setup AndX Response" packet.
+        # (e.g. "Windows 2000 LAN Manager") field in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find the "OS Major" (e.g. 5), "OS Minor" (e.g. 1) as well as the
         # "OS Build" fields in the "SMB2 Session Setup Response packet". We first checkt the dialect.
         # Based on that we take the SMBv1 or SMBv2 (and later) approach.
