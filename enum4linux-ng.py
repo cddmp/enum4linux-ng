@@ -244,6 +244,7 @@ ENUM_LDAP_DOMAIN_INFO = "enum_ldap_domain_info"
 ENUM_NETBIOS = "enum_netbios"
 ENUM_SMB = "enum_smb"
 ENUM_SESSIONS = "enum_sessions"
+ENUM_SMB_DOMAIN_INFO = "enum_smb_domain_info"
 ENUM_LSAQUERY_DOMAIN_INFO = "enum_lsaquery_domain_info"
 ENUM_USERS_RPC = "enum_users_rpc"
 ENUM_GROUPS_RPC = "enum_groups_rpc"
@@ -907,6 +908,73 @@ class EnumLdapDomainInfo():
         if parent:
             return Result(True, "Appears to be root/parent DC")
         return Result(False, "Appears to be child DC")
+
+### Domain Information Enumeration via (unauthenticated) SMB
+
+class EnumSmbDomainInfo():
+    def __init__(self, target, creds):
+        self.target = target
+        self.creds = creds
+
+    def run(self):
+        '''
+        Run module EnumSmbDomainInfo  which extracts domain information from
+        Session Setup Request packets.
+        '''
+        module_name = ENUM_SMB_DOMAIN_INFO
+        print_heading(f"Domain Information via SMB session on {self.target.host}")
+        output = {"domain_info":None}
+
+        for port in self.target.smb_ports:
+            self.target.port = port
+            print_info(f"Enumerating via unauthenticated SMB session on {port}/tcp")
+            result_smb = self.enum_from_smb()
+            if result_smb.retval:
+                print_success(result_smb.retmsg)
+                output["domain_info"] = result_smb.retval
+                break
+            output = process_error(result_smb.retmsg, ["domain_info"], module_name, output)
+
+        return output
+
+    def enum_from_smb(self):
+        '''
+        Tries to set up an SMB null session. Even if the null session does not succeed, the SMB protocol will transfer
+        some information about the remote system in the SMB "Session Setup Response" or the SMB "Session Setup andX Response"
+        packet. These are the domain, DNS domain name as well as DNS host name.
+        '''
+        domain_info = {"domain":None, "name":None, "dns_host_name":None, "dns_host_domain":None}
+
+        smb_conn = None
+        try:
+            smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+            smb_conn.login("", "", "")
+        except Exception as e:
+            if len(e.args) == 2:
+                if isinstance(e.args[1], ConnectionRefusedError):
+                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: Connection refused")
+                if isinstance(e.args[1], socket.timeout):
+                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: timed out")
+            if isinstance(e, nmb.NetBIOSError):
+                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
+            if isinstance(e, (smb.SessionError, smb3.SessionError)):
+                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
+            if not smb_conn:
+                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
+
+        # For SMBv1 we can typically find Domain in the "Session Setup AndX Response" packet.
+        # For SMBv2 and later we find additional information like the DNS name and the DNS FQDN.
+        try:
+            domain_info["domain"] = smb_conn.getServerDomain()
+            domain_info["name"] = smb_conn.getServerName()
+            domain_info["dns_host_name"] = smb_conn.getServerDNSHostName().rstrip('\x00')
+            domain_info["dns_host_domain"] = smb_conn.getServerDNSDomainName().rstrip('\x00')
+        except:
+            pass
+
+        if not any(domain_info.values()):
+            return Result(None, "Could not enumerate domain information via unauthenticated SMB")
+        return Result(domain_info, f"Found domain information via SMB\n{yamlize(domain_info)}")
 
 ### Domain Information Enumeration via lsaquery
 
@@ -2315,6 +2383,7 @@ class Enumerator():
         if SERVICE_SMB in services or SERVICE_SMB_NETBIOS in services:
             modules.append(ENUM_SMB)
             modules.append(ENUM_SESSIONS)
+            modules.append(ENUM_SMB_DOMAIN_INFO)
 
             # The OS info module supports both session-less (unauthenticated) and session-based (authenticated)
             # enumeration. Therefore, we can run it even if no sessions were possible...
@@ -2382,6 +2451,11 @@ class Enumerator():
             self.output.update(result)
             if not self.target.workgroup and result["workgroup"]:
                 self.target.update_workgroup(result["workgroup"])
+
+        # Try to get domain name and sid via lsaquery
+        if ENUM_SMB_DOMAIN_INFO in modules:
+            result = EnumSmbDomainInfo(self.target, self.creds).run()
+            self.output.update(result)
 
         # Get OS information like os version, server type string...
         if ENUM_OS_INFO in modules:
