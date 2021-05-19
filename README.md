@@ -50,6 +50,7 @@ If you use the tool: Don't use it for illegal purposes.
 If you prefer a Docker based installation, an example run can be found [below](#Docker).
 
 ### Demo
+#### Windows Server 2012 R2
 This demonstrates a run against Windows Server 2012 R2 standard installation. The following command is being used:
 
 ```enum4linux-ng.py 192.168.125.131 -u Tester -p 'Start123!' -oY out```
@@ -58,6 +59,7 @@ A user 'Tester' with password 'Start123!' was created. Firewall access was allow
 
 ![Demo](https://github.com/cddmp/misc/blob/master/screencasts/enum4linux-ng/demo1.gif)
 
+#### Metasploitable 2
 The second demo shows a run against Metasploitable 2. The following command is being used:
 
 ```enum4linux-ng.py 192.168.125.145 -A -C```
