@@ -1233,6 +1233,13 @@ class EnumOsInfo():
             except:
                 pass
         else:
+            # Both are not supported in anything other SMBv1, we will therefore
+            # explicitly set this to "not supported", otherwise this would end up
+            # as None/null which would indicate an error with our current semantics
+            # (see the beginning of this file)
+            os_info["native_lanman"] = "not supported"
+            os_info["native_os"] = "not supported"
+
             try:
                 os_major = smb_conn.getServerOSMajor()
                 os_minor = smb_conn.getServerOSMinor()
