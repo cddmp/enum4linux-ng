@@ -922,7 +922,7 @@ class EnumSmbDomainInfo():
         Session Setup Request packets.
         '''
         module_name = ENUM_SMB_DOMAIN_INFO
-        print_heading(f"Domain Information via SMB session on {self.target.host}")
+        print_heading(f"Domain Information via SMB session for {self.target.host}")
         output = {"domain_info":None}
 
         for port in self.target.smb_ports:
@@ -1095,7 +1095,7 @@ class EnumOsInfo():
         enumeration. This allows to get some target information without having a working session for many systems.
         '''
         module_name = ENUM_OS_INFO
-        print_heading(f"OS Information via RPC on {self.target.host}")
+        print_heading(f"OS Information via RPC for {self.target.host}")
         output = {"os_info":None}
         os_info = {"os":None, "os_version":None, "os_build": None, "platform_id":None, "native_os":None, "native_lanman": None, "server_type":None, "server_type_string":None}
 
