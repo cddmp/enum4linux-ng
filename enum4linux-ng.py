@@ -1223,7 +1223,7 @@ class EnumOsInfo():
                 native_os = smb_conn.getSMBServer().get_server_os()
                 if native_os:
                     os_info["native_os"] = f"{native_os}"
-                    match = re.search("Windows ([0-9])\.([0-9])", native_os)
+                    match = re.search(r"Windows ([0-9])\.([0-9])", native_os)
                     if match:
                         os_major = match.group(1)
                         os_minor = match.group(2)
