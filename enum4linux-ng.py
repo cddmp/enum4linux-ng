@@ -1147,6 +1147,11 @@ class EnumOsInfo():
         if not result.retval:
             return Result(None, f"Could not get OS info via 'srvinfo': {result.retmsg}")
 
+        # FIXME: Came across this when trying to have multiple RPC sessions open, should this be move to NT_STATUS_COMMON_ERRORS?
+        # This error is hard to reproduce.
+        if "NT_STATUS_REQUEST_NOT_ACCEPTED" in result.retmsg:
+            return Result(None, f"Could not get OS information via srvinfo: STATUS_REQUEST_NOT_ACCEPTED - too many RPC sessions open?")
+
         return Result(result.retmsg, "")
 
     def enum_from_srvinfo(self):
