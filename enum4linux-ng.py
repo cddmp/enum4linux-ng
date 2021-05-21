@@ -1215,6 +1215,11 @@ class EnumOsInfo():
         os_minor = None
 
         if smb_conn.getDialect() == SMB_DIALECT:
+            # os_build is not supported by SMBv1. We explicitly set this to "not supported",
+            # otherwise this would end up as None/null which would indicate an error with our
+            # current semantics (see the beginning of this file)
+            os_info["os_build"] = "not supported"
+
             try:
                 native_lanman = smb_conn.getSMBServer().get_server_lanman()
                 if native_lanman:
