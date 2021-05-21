@@ -943,7 +943,7 @@ class EnumSmbDomainInfo():
         some information about the remote system in the SMB "Session Setup Response" or the SMB "Session Setup andX Response"
         packet. These are the domain, DNS domain name as well as DNS host name.
         '''
-        domain_info = {"domain":None, "server_name":None, "fqdn":None, "dns_domain":None}
+        domain_info = {"server_name":None, "domain":None, "dns_domain":None, "fqdn":None}
 
         smb_conn = None
         try:
