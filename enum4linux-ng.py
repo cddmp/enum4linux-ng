@@ -684,18 +684,11 @@ class EnumSmb():
                 return Result(True, "Server supports only SMBv1")
             return Result(False, "Server supports dialects higher SMBv1")
         except Exception as e:
-            if len(e.args) == 2:
-                if isinstance(e.args[1], ConnectionRefusedError):
-                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: Connection refused")
-                if isinstance(e.args[1], socket.timeout):
-                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: timed out")
-            if isinstance(e, nmb.NetBIOSError):
-                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
             if isinstance(e, (smb.SessionError, smb3.SessionError)):
                 if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED:
                     return Result(False, "Server supports dialects higher SMBv1")
                 return Result(None, "SMB connection error: session failed")
-            return Result(None, f"SMB connection error on port {self.target.port}/tcp")
+            return process_impacket_smb_exception(e, self.target)
 
 ### Session Checks
 
@@ -950,17 +943,7 @@ class EnumSmbDomainInfo():
             smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             smb_conn.login("", "", "")
         except Exception as e:
-            if len(e.args) == 2:
-                if isinstance(e.args[1], ConnectionRefusedError):
-                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: Connection refused")
-                if isinstance(e.args[1], socket.timeout):
-                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: timed out")
-            if isinstance(e, nmb.NetBIOSError):
-                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
-            if isinstance(e, (smb.SessionError, smb3.SessionError)):
-                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
-            if not smb_conn:
-                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
+            return process_impacket_smb_exception(e,self.target)
 
         # For SMBv1 we can typically find Domain in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find additional information like the DNS name and the DNS FQDN.
@@ -1198,17 +1181,7 @@ class EnumOsInfo():
             smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             smb_conn.login("", "", "")
         except Exception as e:
-            if len(e.args) == 2:
-                if isinstance(e.args[1], ConnectionRefusedError):
-                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: Connection refused")
-                if isinstance(e.args[1], socket.timeout):
-                    return Result(None, f"SMB connection error on port {self.target.port}/tcp: timed out")
-            if isinstance(e, nmb.NetBIOSError):
-                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
-            if isinstance(e, (smb.SessionError, smb3.SessionError)):
-                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
-            if not smb_conn:
-                return Result(None, f"SMB connection error on port {self.target.port}/tcp: session failed")
+            return process_impacket_smb_exception(e, self.target)
 
         # For SMBv1 we can typically find the "Native OS" (e.g. "Windows 5.1")  and "Native LAN Manager"
         # (e.g. "Windows 2000 LAN Manager") field in the "Session Setup AndX Response" packet.
@@ -2731,6 +2704,26 @@ def process_error(msg, affected_entries, module_name, output_dict):
 
         output_dict["errors"][entry][module_name].append(msg)
     return output_dict
+
+def process_impacket_smb_exception(exception, target):
+    '''
+    Function for handling exceptions during SMB session setup when using the impacket library.
+    '''
+
+    if len(exception.args) == 2:
+        if isinstance(exception.args[1], ConnectionRefusedError):
+            return Result(None, f"SMB connection error on port {target.port}/tcp: Connection refused")
+        if isinstance(exception.args[1], socket.timeout):
+            return Result(None, f"SMB connection error on port {target.port}/tcp: timed out")
+    if isinstance(exception, nmb.NetBIOSError):
+        return Result(None, f"SMB connection error on port {target.port}/tcp: session failed")
+    if isinstance(exception, (smb.SessionError, smb3.SessionError)):
+        nt_status_error = nt_status_error_filter(str(exception))
+        if nt_status_error:
+            return Result(None, f"SMB connection error on port {target.port}/tcp: {nt_status_error}")
+        return Result(None, f"SMB connection error on port {target.port}/tcp: session failed")
+    if not smb_conn:
+        return Result(None, f"SMB connection error on port {target.port}/tcp: session failed")
 
 def nt_status_error_filter(msg):
     for error in NT_STATUS_COMMON_ERRORS:
