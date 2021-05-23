@@ -2100,14 +2100,12 @@ class EnumPolicy():
             dce.connect()
             dce.bind(samr.MSRPC_UUID_SAMR)
         except Exception as e:
-            error_msg = process_impacket_smb_exception(e, self.target)
-            return Result((None, None), f"{error_msg}")
+            return Result((None, None), process_impacket_smb_exception(e, self.target))
 
         try:
             resp = samr.hSamrConnect2(dce)
         except Exception as e:
-            error_msg = process_impacket_smb_exception(e, self.target)
-            return Result((None, None), f"{error_msg}")
+            return Result((None, None), process_impacket_smb_exception(e, self.target))
 
         if resp['ErrorCode'] != 0:
             return Result((None, None), f"SamrConnect2 call failed on port {self.target.port}/tcp")
