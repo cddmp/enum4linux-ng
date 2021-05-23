@@ -943,8 +943,8 @@ class EnumSmbDomainInfo():
             smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             smb_conn.login("", "", "")
         except Exception as e:
-            error_msg = process_impacket_smb_exception(e, self.target, default_fail=False)
-            if error_msg:
+            error_msg = process_impacket_smb_exception(e, self.target)
+            if not "STATUS_ACCESS_DENIED" in error_msg:
                 return Result(None, error_msg)
 
         # For SMBv1 we can typically find Domain in the "Session Setup AndX Response" packet.
@@ -1183,8 +1183,8 @@ class EnumOsInfo():
             smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             smb_conn.login("", "", "")
         except Exception as e:
-            error_msg = process_impacket_smb_exception(e, self.target, default_fail=False)
-            if error_msg:
+            error_msg = process_impacket_smb_exception(e, self.target)
+            if not "STATUS_ACCESS_DENIED" in error_msg:
                 return Result(None, error_msg)
 
         # For SMBv1 we can typically find the "Native OS" (e.g. "Windows 5.1")  and "Native LAN Manager"
@@ -2706,7 +2706,7 @@ def process_error(msg, affected_entries, module_name, output_dict):
         output_dict["errors"][entry][module_name].append(msg)
     return output_dict
 
-def process_impacket_smb_exception(exception, target, default_fail=True):
+def process_impacket_smb_exception(exception, target):
     '''
     Function for handling exceptions during SMB session setup when using the impacket library.
     '''
@@ -2724,9 +2724,10 @@ def process_impacket_smb_exception(exception, target, default_fail=True):
         return f"SMB connection error on port {target.port}/tcp: session failed"
     if isinstance(exception, AttributeError):
         return f"SMB connection error on port {target.port}/tcp: session failed"
-    if default_fail:
-        return f"SMB connection error on port {target.port}/tcp: session failed"
-    return ""
+    nt_status_error = nt_status_error_filter(str(exception))
+    if nt_status_error:
+        return f"SMB connection error on port {target.port}/tcp: {nt_status_error}"
+    return f"SMB connection error on port {target.port}/tcp: session failed"
 
 def nt_status_error_filter(msg):
     for error in NT_STATUS_COMMON_ERRORS:
