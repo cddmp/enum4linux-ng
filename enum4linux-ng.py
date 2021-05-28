@@ -1433,7 +1433,7 @@ class EnumUsersRpc():
 
         #FIXME: Examine
         if "NT_STATUS_NO_SUCH_USER" in result.retmsg:
-            return Result(None, f"Could not find details for user '{name}: STATUS_NO_SUCH_USER")
+            return Result(None, f"Could not find details for user '{name}': STATUS_NO_SUCH_USER")
 
         match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", result.retmsg, re.DOTALL)
         if match:
