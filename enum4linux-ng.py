@@ -202,7 +202,7 @@ SMB_DIALECTS = {
         SMB_DIALECT: "SMB 1.0",
         SMB2_DIALECT_002: "SMB 2.02",
         SMB2_DIALECT_21: "SMB 2.1",
-        SMB2_DIALECT_30: "SMB 3"
+        SMB2_DIALECT_30: "SMB 3.0"
     }
 
 # This list will be used by the function nt_status_error_filter() which is typically
@@ -659,7 +659,7 @@ class EnumSmb():
                 break
 
         # Does the target only support SMBv1? Then enforce it!
-        if result.retval and result.retval["smb1_only"]:
+        if result.retval and result.retval["SMB1 only"]:
             print_info("Enforcing legacy SMBv1 for further enumeration")
             result = self.enforce_smb1()
             if not result.retval:
@@ -687,9 +687,25 @@ class EnumSmb():
                 SMB_DIALECTS[SMB2_DIALECT_002]: False,
                 SMB_DIALECTS[SMB2_DIALECT_21]:False,
                 SMB_DIALECTS[SMB2_DIALECT_30]:False,
-                "smb1_only": False
+                "SMB1 only": False,
+                "Preferred Dialect": None
         }
 
+        # Note: Therefore, currently impacket does not support dialect 3.02 and 3.11. Therfore, the SMB 3 check is not very
+        # reliable but it is still the best we have for now.
+
+        # First we let the target decide what dialect it likes to talk...
+        try:
+            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+            dialect = smb_conn.getDialect()
+            smb_conn.close()
+            output["Preferred Dialect"] = SMB_DIALECTS[dialect]
+        except Exception as exc:
+            if isinstance(exc, (smb3.SessionError)):
+                if nt_status_error_filter(str(exc)) == "STATUS_NOT_SUPPORTED":
+                    output["Preferred Dialect"] = "> SMB 3.0"
+
+        # ...then we will check the other ones.
         for preferred_dialect in [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30]:
             try:
                 smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=preferred_dialect)
@@ -698,11 +714,11 @@ class EnumSmb():
                 if dialect == preferred_dialect:
                     output[SMB_DIALECTS[preferred_dialect]] = True
                     if dialect == SMB_DIALECT:
-                        output["smb1_only"] = True
+                        output["SMB1 only"] = True
                     else:
-                        output["smb1_only"] = False
-            except Exception as e:
-                return Result(None, process_impacket_smb_exception(e, self.target))
+                        output["SMB1 only"] = False
+            except Exception as exc:
+                pass
 
         return Result(output, f"Supported dialects:\n{yamlize(output)}")
 
