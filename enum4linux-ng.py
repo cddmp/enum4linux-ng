@@ -1304,8 +1304,11 @@ class EnumOsInfo():
         server_type_string = os_info["server_type_string"]
         os = "unknown"
 
-        if native_lanman is not None and "Samba" in native_lanman:
-            os = f"Linux/Unix ({native_lanman})"
+        if native_lanman is not None and native_lanman != "not supported":
+            if "Samba" in native_lanman:
+                os = f"Linux/Unix ({native_lanman})"
+            elif "Windows" in native_lanman:
+                os = native_lanman
         elif server_type_string is not None and "Samba" in server_type_string:
             # Examples:
             # Wk Sv ... Samba 4.8.0-Debian
