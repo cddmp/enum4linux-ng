@@ -968,7 +968,7 @@ class EnumSmbDomainInfo():
         some information about the remote system in the SMB "Session Setup Response" or the SMB "Session Setup andX Response"
         packet. These are the domain, DNS domain name as well as DNS host name.
         '''
-        domain_info = {"netbios_computer_name":None, "netbios_domain_name":None, "dns_domain":None, "fqdn":None}
+        domain_info = {"NetBIOS computer name":None, "NetBIOS domain name":None, "DNS domain":None, "FQDN":None}
 
         smb_conn = None
         try:
@@ -982,10 +982,10 @@ class EnumSmbDomainInfo():
         # For SMBv1 we can typically find Domain in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find additional information like the DNS name and the DNS FQDN.
         try:
-            domain_info["netbios_domain_name"] = smb_conn.getServerDomain()
-            domain_info["netbios_computer_name"] = smb_conn.getServerName()
-            domain_info["fqdn"] = smb_conn.getServerDNSHostName().rstrip('\x00')
-            domain_info["dns_domain"] = smb_conn.getServerDNSDomainName().rstrip('\x00')
+            domain_info["NetBIOS domain name"] = smb_conn.getServerDomain()
+            domain_info["NetBIOS computer name"] = smb_conn.getServerName()
+            domain_info["FQDN"] = smb_conn.getServerDNSHostName().rstrip('\x00')
+            domain_info["DNS domain"] = smb_conn.getServerDNSDomainName().rstrip('\x00')
         except:
             pass
 
@@ -1114,7 +1114,7 @@ class EnumOsInfo():
         module_name = ENUM_OS_INFO
         print_heading(f"OS Information via RPC for {self.target.host}")
         output = {"os_info":None}
-        os_info = {"os":None, "os_version":None, "os_build": None, "platform_id":None, "native_os":None, "native_lanman": None, "server_type":None, "server_type_string":None}
+        os_info = {"OS":None, "OS version":None, "OS build": None, "Native OS":None, "Native Lanman": None, "platform_id":None, "server_type":None, "server_type_string":None}
 
         # Even an unauthenticated SMB session gives OS information about the target system, collect these first
         for port in self.target.smb_ports:
@@ -1180,7 +1180,7 @@ class EnumOsInfo():
         if result.retval is None:
             return result
 
-        os_info = {"os_version":None, "server_type":None, "server_type_string":None, "platform_id":None}
+        os_info = {"OS version":None, "server_type":None, "server_type_string":None, "platform_id":None}
         search_pattern_list = ["platform_id", "os version", "server type"]
         first = True
         for line in result.retval.splitlines():
@@ -1194,7 +1194,9 @@ class EnumOsInfo():
             for search_pattern in search_pattern_list:
                 match = re.search(fr"\s+{search_pattern}\s+:\s+(.*)", line)
                 if match:
-                    key = search_pattern.replace(" ", "_")
+                    key = search_pattern
+                    if search_pattern == "os version":
+                        key = "OS version"
                     os_info[key] = match.group(1)
 
         if not os_info:
@@ -1208,7 +1210,7 @@ class EnumOsInfo():
         packet. This is the major and minor OS version as well as the build number. In SMBv1 also the "Native OS" as well as
         the "Native LAN Manager" will be reported.
         '''
-        os_info = {"os_version":None, "os_build":None, "native_lanman":None, "native_os":None}
+        os_info = {"OS version":None, "OS build":None, "Native Lanman":None, "Native OS":None}
 
         smb_conn = None
         try:
@@ -1232,23 +1234,23 @@ class EnumOsInfo():
             # os_build is not supported by SMBv1. We explicitly set this to "not supported",
             # otherwise this would end up as None/null which would indicate an error with our
             # current semantics (see the beginning of this file)
-            os_info["os_build"] = "not supported"
+            os_info["OS build"] = "not supported"
 
             try:
                 native_lanman = smb_conn.getSMBServer().get_server_lanman()
                 if native_lanman:
-                    os_info["native_lanman"] = f"{native_lanman}"
+                    os_info["Native Lanman"] = f"{native_lanman}"
 
                 native_os = smb_conn.getSMBServer().get_server_os()
                 if native_os:
-                    os_info["native_os"] = f"{native_os}"
+                    os_info["Native OS"] = f"{native_os}"
                     match = re.search(r"Windows ([0-9])\.([0-9])", native_os)
                     if match:
                         os_major = match.group(1)
                         os_minor = match.group(2)
             except AttributeError:
-                os_info["native_lanman"] = "not supported"
-                os_info["native_os"] = "not supported"
+                os_info["Native Lanman"] = "not supported"
+                os_info["Native OS"] = "not supported"
             except:
                 pass
         else:
@@ -1256,8 +1258,8 @@ class EnumOsInfo():
             # explicitly set this to "not supported", otherwise this would end up
             # as None/null which would indicate an error with our current semantics
             # (see the beginning of this file)
-            os_info["native_lanman"] = "not supported"
-            os_info["native_os"] = "not supported"
+            os_info["Native Lanman"] = "not supported"
+            os_info["Native OS"] = "not supported"
 
             try:
                 os_major = smb_conn.getServerOSMajor()
@@ -1268,24 +1270,24 @@ class EnumOsInfo():
             try:
                 os_build = smb_conn.getServerOSBuild()
                 if os_build is not None:
-                    os_info["os_build"] = f"{os_build}"
+                    os_info["OS build"] = f"{os_build}"
                 else:
-                    os_info["os_build"] = "not supported"
+                    os_info["OS build"] = "not supported"
             except:
                 pass
 
         if os_major is not None and os_minor is not None:
-            os_info["os_version"] = f"{os_major}.{os_minor}"
+            os_info["OS version"] = f"{os_major}.{os_minor}"
         else:
-            os_info["os_version"] = "not supported"
+            os_info["OS version"] = "not supported"
 
         if not any(os_info.values()):
             return Result(None, "Could not enumerate information via unauthenticated SMB")
         return Result(os_info, "Found OS information via SMB")
 
     def os_info_to_human(self, os_info):
-        native_lanman = os_info["native_lanman"]
-        version = os_info["os_version"]
+        native_lanman = os_info["Native Lanman"]
+        version = os_info["OS version"]
         server_type_string = os_info["server_type_string"]
         os = "unknown"
 
@@ -1303,7 +1305,7 @@ class EnumOsInfo():
         elif version in OS_VERSIONS:
             os = OS_VERSIONS[version]
 
-        os_info["os"] = os
+        os_info["OS"] = os
 
         return os_info
 
