@@ -706,8 +706,8 @@ class EnumSmb():
                     # This is a bit fuzzy. At this point we know that SMB is supported. We tried to talk SMB 3.0 with
                     # the remote host. The target replies with STATUS_NOT_SUPPORTED. Since impacket can only talk SMB 3.0
                     # but not 3.02 or 3.11 we guess that it supports only these dialects.
-                    if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED and preferred_DIALECT is SMB2_DIALECT_30:
-                        output[SMB_DIALECTS[preferred_dialet]] = True
+                    if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED and preferred_dialect is SMB2_DIALECT_30:
+                        output[SMB_DIALECTS[preferred_dialect]] = True
                         return Result(None, process_impacket_smb_exception(e, self.target))
 
         return Result(output, f"Supported dialects:\n{yamlize(output)}")
