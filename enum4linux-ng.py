@@ -659,7 +659,7 @@ class EnumSmb():
                 break
 
         # Does the target only support SMBv1? Then enforce it!
-        if result.retval["smb1_only"]:
+        if result.retval and result.retval["smb1_only"]:
             print_info("Enforcing legacy SMBv1 for further enumeration")
             result = self.enforce_smb1()
             if not result.retval:
@@ -687,10 +687,10 @@ class EnumSmb():
                 SMB_DIALECTS[SMB2_DIALECT_002]: False,
                 SMB_DIALECTS[SMB2_DIALECT_21]:False,
                 SMB_DIALECTS[SMB2_DIALECT_30]:False,
-                "smb1_only": True
+                "smb1_only": False
         }
 
-        for preferred_dialect in [ SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30 ]:
+        for preferred_dialect in [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30]:
             try:
                 smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=preferred_dialect)
                 dialect = smb_conn.getDialect()
@@ -702,13 +702,7 @@ class EnumSmb():
                     else:
                         output["smb1_only"] = False
             except Exception as e:
-                if isinstance(e, (smb3.SessionError)):
-                    # This is a bit fuzzy. At this point we know that SMB is supported. We tried to talk SMB 3.0 with
-                    # the remote host. The target replies with STATUS_NOT_SUPPORTED. Since impacket can only talk SMB 3.0
-                    # but not 3.02 or 3.11 we guess that it supports only these dialects.
-                    if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED and preferred_dialect is SMB2_DIALECT_30:
-                        output[SMB_DIALECTS[preferred_dialect]] = True
-                        return Result(None, process_impacket_smb_exception(e, self.target))
+                return Result(None, process_impacket_smb_exception(e, self.target))
 
         return Result(output, f"Supported dialects:\n{yamlize(output)}")
 
