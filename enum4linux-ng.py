@@ -334,6 +334,7 @@ class Target:
         self.smb_ports = []
         self.ldap_ports = []
         self.services = []
+        self.smb1 = False
 
         if not self.valid_host(host):
             raise Exception()
@@ -657,6 +658,9 @@ class EnumSmb():
                 output["smb_dialects"] = result.retval
                 print_success(result.retmsg)
                 break
+
+        if result.retval and result.retval[SMB_DIALECTS[SMB_DIALECT]]:
+            self.target.smb1 = True
 
         # Does the target only support SMBv1? Then enforce it!
         if result.retval and result.retval["SMB1 only"]:
