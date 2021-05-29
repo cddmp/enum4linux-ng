@@ -1120,7 +1120,7 @@ class EnumOsInfo():
         module_name = ENUM_OS_INFO
         print_heading(f"OS Information via RPC for {self.target.host}")
         output = {"os_info":None}
-        os_info = {"OS":None, "OS version":None, "OS build": None, "Native OS":None, "Native LAN manager": None, "platform_id":None, "server_type":None, "server_type_string":None}
+        os_info = {"OS":None, "OS version":None, "OS build": None, "Native OS":None, "Native LAN manager": None, "Platform id":None, "Server type":None, "Server type string":None}
 
         # Even an unauthenticated SMB session gives OS information about the target system, collect these first
         for port in self.target.smb_ports:
@@ -1186,24 +1186,25 @@ class EnumOsInfo():
         if result.retval is None:
             return result
 
-        os_info = {"OS version":None, "server_type":None, "server_type_string":None, "platform_id":None}
-        search_pattern_list = ["platform_id", "os version", "server type"]
+        os_info = {"OS version":None, "Server type":None, "Server type string":None, "Platform id":None}
+        search_patterns = {
+                "platform_id":"Platform id",
+                "os version":"OS version",
+                "server type":"Server type"
+                }
         first = True
         for line in result.retval.splitlines():
 
             if first:
                 match = re.search(r"\s+[^\s]+\s+(.*)", line)
                 if match:
-                    os_info['server_type_string'] = match.group(1).rstrip()
+                    os_info['Server type string'] = match.group(1).rstrip()
                 first = False
 
-            for search_pattern in search_pattern_list:
+            for search_pattern in search_patterns.keys():
                 match = re.search(fr"\s+{search_pattern}\s+:\s+(.*)", line)
                 if match:
-                    key = search_pattern
-                    if search_pattern == "os version":
-                        key = "OS version"
-                    os_info[key] = match.group(1)
+                    os_info[search_patterns[search_pattern]] = match.group(1)
 
         if not os_info:
             return Result(None, "Could not parse result of 'srvinfo' command, please open a GitHub issue")
@@ -1300,15 +1301,15 @@ class EnumOsInfo():
 
     def os_info_to_human(self, os_info):
         native_lanman = os_info["Native LAN manager"]
+        native_os = os_info["Native OS"]
         version = os_info["OS version"]
-        server_type_string = os_info["server_type_string"]
+        server_type_string = os_info["Server type string"]
         os = "unknown"
 
-        if native_lanman is not None and native_lanman != "not supported":
-            if "Samba" in native_lanman:
-                os = f"Linux/Unix ({native_lanman})"
-            elif "Windows" in native_lanman:
-                os = native_lanman
+        if native_lanman is not None and "Samba" in native_lanman:
+            os = f"Linux/Unix ({native_lanman})"
+        elif native_os is not None and "Windows" in native_os and not "Windows 5.0" in native_os:
+            os = native_os
         elif server_type_string is not None and "Samba" in server_type_string:
             # Examples:
             # Wk Sv ... Samba 4.8.0-Debian
