@@ -334,7 +334,7 @@ class Target:
         self.smb_ports = []
         self.ldap_ports = []
         self.services = []
-        self.smb1 = False
+        self.smb_dialects = []
 
         if not self.valid_host(host):
             raise Exception()
@@ -659,8 +659,8 @@ class EnumSmb():
                 print_success(result.retmsg)
                 break
 
-        if result.retval and result.retval[SMB_DIALECTS[SMB_DIALECT]]:
-            self.target.smb1 = True
+        if result.retval:
+            self.target.smb_dialects = output["smb_dialects"]
 
         # Does the target only support SMBv1? Then enforce it!
         if result.retval and result.retval["SMB1 only"]:
@@ -1218,30 +1218,29 @@ class EnumOsInfo():
         '''
         os_info = {"OS version":None, "OS build":None, "Native LAN manager":None, "Native OS":None}
 
-        smb_conn = None
+        os_major = None
+        os_minor = None
 
-        try:
-            smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            smb_conn.login("", "", "")
-        except Exception as e:
-            error_msg = process_impacket_smb_exception(e, self.target)
-            if not "STATUS_ACCESS_DENIED" in error_msg:
-                return Result(None, error_msg)
+        smb1_supported = self.target.smb_dialects[SMB_DIALECTS[SMB_DIALECT]]
+        smb1_only = self.target.smb_dialects["SMB1 only"]
 
         # For SMBv1 we can typically find the "Native OS" (e.g. "Windows 5.1")  and "Native LAN Manager"
         # (e.g. "Windows 2000 LAN Manager") field in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find the "OS Major" (e.g. 5), "OS Minor" (e.g. 1) as well as the
-        # "OS Build" fields in the "SMB2 Session Setup Response packet". We first checkt the dialect.
-        # Based on that we take the SMBv1 or SMBv2 (and later) approach.
+        # "OS Build" fields in the "SMB2 Session Setup Response packet".
 
-        os_major = None
-        os_minor = None
+        if smb1_supported:
+            smb_conn = None
+            try:
+                smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=SMB_DIALECT)
+                smb_conn.login("", "", "")
+            except Exception as e:
+                error_msg = process_impacket_smb_exception(e, self.target)
+                if not "STATUS_ACCESS_DENIED" in error_msg:
+                    return Result(None, error_msg)
 
-        if smb_conn.getDialect() == SMB_DIALECT:
-            # os_build is not supported by SMBv1. We explicitly set this to "not supported",
-            # otherwise this would end up as None/null which would indicate an error with our
-            # current semantics (see the beginning of this file)
-            os_info["OS build"] = "not supported"
+            if smb1_only:
+                os_info["OS build"] = "not supported"
 
             try:
                 native_lanman = smb_conn.getSMBServer().get_server_lanman()
@@ -1260,13 +1259,20 @@ class EnumOsInfo():
                 os_info["Native OS"] = "not supported"
             except:
                 pass
-        else:
-            # Both are not supported in anything other SMBv1, we will therefore
-            # explicitly set this to "not supported", otherwise this would end up
-            # as None/null which would indicate an error with our current semantics
-            # (see the beginning of this file)
-            os_info["Native LAN manager"] = "not supported"
-            os_info["Native OS"] = "not supported"
+
+        if not smb1_only:
+            smb_conn = None
+            try:
+                smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+                smb_conn.login("", "", "")
+            except Exception as e:
+                error_msg = process_impacket_smb_exception(e, self.target)
+                if not "STATUS_ACCESS_DENIED" in error_msg:
+                    return Result(None, error_msg)
+
+            if not smb1_supported:
+                os_info["Native LAN manager"] = "not supported"
+                os_info["Native OS"] = "not supported"
 
             try:
                 os_major = smb_conn.getServerOSMajor()
