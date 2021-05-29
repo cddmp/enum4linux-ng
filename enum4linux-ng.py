@@ -85,7 +85,7 @@ from subprocess import check_output, STDOUT, TimeoutExpired
 import sys
 import tempfile
 from impacket import nmb, smb, smbconnection, smb3, nt_errors
-from impacket.smbconnection import SMB_DIALECT
+from impacket.smbconnection import SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
@@ -197,6 +197,13 @@ SAMBA_CLIENT_ERRORS = [
         "WARNING: no network interfaces found",
         "Can't load /etc/samba/smb.conf - run testparm to debug it"
     ]
+
+SMB_DIALECTS = {
+        SMB_DIALECT: "SMB 1.0",
+        SMB2_DIALECT_002: "SMB 2.02",
+        SMB2_DIALECT_21: "SMB 2.1",
+        SMB2_DIALECT_30: "SMB 3"
+    }
 
 # This list will be used by the function nt_status_error_filter() which is typically
 # called after running a Samba client command (see run()). The idea is to filter out
@@ -641,24 +648,24 @@ class EnumSmb():
         output = {}
 
         for port in self.target.smb_ports:
-            print_info(f"Check for legacy SMBv1 on {port}/tcp")
+            print_info(f"Trying on {port}/tcp")
             self.target.port = port
-            result = self.check_smb1()
+            result = self.check_smb_dialects()
             if result.retval is None:
                 output = process_error(result.retmsg, ["smb1_only"], module_name, output)
             else:
-                output["smb1_only"] = result.retval
+                output["smb_dialects"] = result.retval
                 print_success(result.retmsg)
                 break
 
         # Does the target only support SMBv1? Then enforce it!
-        if result.retval:
+        if result.retval["smb1_only"]:
             print_info("Enforcing legacy SMBv1 for further enumeration")
             result = self.enforce_smb1()
             if not result.retval:
-                output = process_error(result.retmsg, ["smb1_only"], module_name, output)
+                output = process_error(result.retmsg, ["smb_dialects"], module_name, output)
 
-        output["smb1_only"] = result.retval
+        output["smb_dialects"] = result.retval
         return output
 
     def enforce_smb1(self):
@@ -669,26 +676,41 @@ class EnumSmb():
             pass
         return Result(False, "Could not enforce SMBv1")
 
-    def check_smb1(self):
+    def check_smb_dialects(self):
         '''
         Current implementations of the samba client tools will enforce at least SMBv2 by default. This will give false
         negatives during session checks, if the target only supports SMBv1. Therefore, we try to find out here whether
         the target system only speaks SMBv1.
         '''
+        output = {
+                SMB_DIALECTS[SMB_DIALECT]: False,
+                SMB_DIALECTS[SMB2_DIALECT_002]: False,
+                SMB_DIALECTS[SMB2_DIALECT_21]:False,
+                SMB_DIALECTS[SMB2_DIALECT_30]:False,
+                "smb1_only": True
+        }
 
-        try:
-            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            dialect = smb_conn.getDialect()
-            smb_conn.close()
-            if dialect == SMB_DIALECT:
-                return Result(True, "Server supports only SMBv1")
-            return Result(False, "Server supports dialects higher SMBv1")
-        except Exception as e:
-            if isinstance(e, (smb.SessionError, smb3.SessionError)):
-                if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED:
-                    return Result(False, "Server supports dialects higher SMBv1")
-                return Result(None, "SMB connection error: session failed")
-            return Result(None, process_impacket_smb_exception(e, self.target))
+        for preferred_dialect in [ SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30 ]:
+            try:
+                smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=preferred_dialect)
+                dialect = smb_conn.getDialect()
+                smb_conn.close()
+                if dialect == preferred_dialect:
+                    output[SMB_DIALECTS[preferred_dialect]] = True
+                    if dialect == SMB_DIALECT:
+                        output["smb1_only"] = True
+                    else:
+                        output["smb1_only"] = False
+            except Exception as e:
+                if isinstance(e, (smb3.SessionError)):
+                    # This is a bit fuzzy. At this point we know that SMB is supported. We tried to talk SMB 3.0 with
+                    # the remote host. The target replies with STATUS_NOT_SUPPORTED. Since impacket can only talk SMB 3.0
+                    # but not 3.02 or 3.11 we guess that it supports only these dialects.
+                    if e.get_error_code() == nt_errors.STATUS_NOT_SUPPORTED and preferred_DIALECT is SMB2_DIALECT_30:
+                        output[SMB_DIALECTS[preferred_dialet]] = True
+                        return Result(None, process_impacket_smb_exception(e, self.target))
+
+        return Result(output, f"Supported dialects:\n{yamlize(output)}")
 
 ### Session Checks
 
