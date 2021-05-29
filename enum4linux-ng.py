@@ -980,6 +980,8 @@ class EnumSmbDomainInfo():
             smb_conn.login("", "", "")
         except Exception as e:
             error_msg = process_impacket_smb_exception(e, self.target)
+            # STATUS_ACCESS_DENIED is the only error we can safely ignore. It basically tells us that a 
+            # null session is not allowed, but that is not an issue for our enumeration.
             if not "STATUS_ACCESS_DENIED" in error_msg:
                 return Result(None, error_msg)
 
