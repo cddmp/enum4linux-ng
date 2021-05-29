@@ -1120,7 +1120,7 @@ class EnumOsInfo():
         module_name = ENUM_OS_INFO
         print_heading(f"OS Information via RPC for {self.target.host}")
         output = {"os_info":None}
-        os_info = {"OS":None, "OS version":None, "OS build": None, "Native OS":None, "Native Lanman": None, "platform_id":None, "server_type":None, "server_type_string":None}
+        os_info = {"OS":None, "OS version":None, "OS build": None, "Native OS":None, "Native LAN manager": None, "platform_id":None, "server_type":None, "server_type_string":None}
 
         # Even an unauthenticated SMB session gives OS information about the target system, collect these first
         for port in self.target.smb_ports:
@@ -1216,9 +1216,10 @@ class EnumOsInfo():
         packet. This is the major and minor OS version as well as the build number. In SMBv1 also the "Native OS" as well as
         the "Native LAN Manager" will be reported.
         '''
-        os_info = {"OS version":None, "OS build":None, "Native Lanman":None, "Native OS":None}
+        os_info = {"OS version":None, "OS build":None, "Native LAN manager":None, "Native OS":None}
 
         smb_conn = None
+
         try:
             smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             smb_conn.login("", "", "")
@@ -1245,7 +1246,7 @@ class EnumOsInfo():
             try:
                 native_lanman = smb_conn.getSMBServer().get_server_lanman()
                 if native_lanman:
-                    os_info["Native Lanman"] = f"{native_lanman}"
+                    os_info["Native LAN manager"] = f"{native_lanman}"
 
                 native_os = smb_conn.getSMBServer().get_server_os()
                 if native_os:
@@ -1255,7 +1256,7 @@ class EnumOsInfo():
                         os_major = match.group(1)
                         os_minor = match.group(2)
             except AttributeError:
-                os_info["Native Lanman"] = "not supported"
+                os_info["Native LAN manager"] = "not supported"
                 os_info["Native OS"] = "not supported"
             except:
                 pass
@@ -1264,7 +1265,7 @@ class EnumOsInfo():
             # explicitly set this to "not supported", otherwise this would end up
             # as None/null which would indicate an error with our current semantics
             # (see the beginning of this file)
-            os_info["Native Lanman"] = "not supported"
+            os_info["Native LAN manager"] = "not supported"
             os_info["Native OS"] = "not supported"
 
             try:
@@ -1292,7 +1293,7 @@ class EnumOsInfo():
         return Result(os_info, "Found OS information via SMB")
 
     def os_info_to_human(self, os_info):
-        native_lanman = os_info["Native Lanman"]
+        native_lanman = os_info["Native LAN manager"]
         version = os_info["OS version"]
         server_type_string = os_info["server_type_string"]
         os = "unknown"
