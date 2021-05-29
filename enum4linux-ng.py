@@ -936,7 +936,7 @@ class EnumSmbDomainInfo():
         some information about the remote system in the SMB "Session Setup Response" or the SMB "Session Setup andX Response"
         packet. These are the domain, DNS domain name as well as DNS host name.
         '''
-        domain_info = {"server_name":None, "domain":None, "dns_domain":None, "fqdn":None}
+        domain_info = {"netbios_computer_name":None, "netbios_domain_name":None, "dns_domain":None, "fqdn":None}
 
         smb_conn = None
         try:
@@ -950,8 +950,8 @@ class EnumSmbDomainInfo():
         # For SMBv1 we can typically find Domain in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find additional information like the DNS name and the DNS FQDN.
         try:
-            domain_info["domain"] = smb_conn.getServerDomain()
-            domain_info["server_name"] = smb_conn.getServerName()
+            domain_info["netbios_domain_name"] = smb_conn.getServerDomain()
+            domain_info["netbios_computer_name"] = smb_conn.getServerName()
             domain_info["fqdn"] = smb_conn.getServerDNSHostName().rstrip('\x00')
             domain_info["dns_domain"] = smb_conn.getServerDNSDomainName().rstrip('\x00')
         except:
