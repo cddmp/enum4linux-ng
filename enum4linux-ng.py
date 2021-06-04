@@ -84,7 +84,7 @@ import socket
 from subprocess import check_output, STDOUT, TimeoutExpired
 import sys
 import tempfile
-from impacket import nmb, smb, smbconnection, smb3, nt_errors
+from impacket import nmb, smb, smbconnection, smb3
 from impacket.smbconnection import SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
@@ -198,6 +198,7 @@ SAMBA_CLIENT_ERRORS = [
         "Can't load /etc/samba/smb.conf - run testparm to debug it"
     ]
 
+# Translates various SMB dialect values to human readable strings
 SMB_DIALECTS = {
         SMB_DIALECT: "SMB 1.0",
         SMB2_DIALECT_002: "SMB 2.02",
@@ -695,29 +696,40 @@ class EnumSmb():
                 "Preferred Dialect": None
         }
 
-        # Note: Therefore, currently impacket does not support dialect 3.02 and 3.11. Therfore, the SMB 3 check is not very
-        # reliable but it is still the best we have for now.
+        smb_dialects = [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30]
 
-        # First we let the target decide what dialect it likes to talk...
+        # First we let the target decide what dialect it likes to talk.
+        current_dialect = None
         try:
             smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            dialect = smb_conn.getDialect()
+            current_dialect = smb_conn.getDialect()
             smb_conn.close()
-            output["Preferred Dialect"] = SMB_DIALECTS[dialect]
+
+            # We found one supported dialect, this is also the dialect the remote host selected/preferred of the offered ones
+            output[SMB_DIALECTS[current_dialect]] = True
+            output["Preferred Dialect"] = SMB_DIALECTS[current_dialect]
         except Exception as exc:
+            # Currently the impacket library does not support SMB 3.02 and 3.11. Whenever a remote host only supports 3.02 or 3.11
+            # we should end up here. This is somewhat vague, but better when nothing.
             if isinstance(exc, (smb3.SessionError)):
                 if nt_status_error_filter(str(exc)) == "STATUS_NOT_SUPPORTED":
                     output["Preferred Dialect"] = "> SMB 3.0"
 
-        # ...then we will check the other ones.
-        for preferred_dialect in [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30]:
+        # Did the session setup above work? If so, we found a supported SMB dialect and we can remove it from the list,
+        # so that we do not run the check twice.
+        if current_dialect is not None:
+            smb_dialects.remove(current_dialect)
+        current_dialect = None
+
+        # Check all remaining dialects (which impacket supports)
+        for preferred_dialect in smb_dialects:
             try:
                 smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=preferred_dialect)
-                dialect = smb_conn.getDialect()
+                current_dialect = smb_conn.getDialect()
                 smb_conn.close()
-                if dialect == preferred_dialect:
-                    output[SMB_DIALECTS[preferred_dialect]] = True
-                    if dialect == SMB_DIALECT:
+                if current_dialect == preferred_dialect:
+                    output[SMB_DIALECTS[current_dialect]] = True
+                    if current_dialect == SMB_DIALECT:
                         output["SMB1 only"] = True
                     else:
                         output["SMB1 only"] = False
@@ -980,7 +992,7 @@ class EnumSmbDomainInfo():
             smb_conn.login("", "", "")
         except Exception as e:
             error_msg = process_impacket_smb_exception(e, self.target)
-            # STATUS_ACCESS_DENIED is the only error we can safely ignore. It basically tells us that a 
+            # STATUS_ACCESS_DENIED is the only error we can safely ignore. It basically tells us that a
             # null session is not allowed, but that is not an issue for our enumeration.
             if not "STATUS_ACCESS_DENIED" in error_msg:
                 return Result(None, error_msg)
