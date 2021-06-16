@@ -729,12 +729,14 @@ class EnumSmb():
                 smb_conn.close()
                 if current_dialect == preferred_dialect:
                     output[SMB_DIALECTS[current_dialect]] = True
-                    if current_dialect == SMB_DIALECT:
-                        output["SMB1 only"] = True
-                    else:
-                        output["SMB1 only"] = False
             except Exception as exc:
                 pass
+
+        if output[SMB_DIALECTS[SMB_DIALECT]] and \
+                not output[SMB_DIALECTS[SMB2_DIALECT_002]] and \
+                not output[SMB_DIALECTS[SMB2_DIALECT_21]] and \
+                not output[SMB_DIALECTS[SMB2_DIALECT_30]]:
+            output["SMB1 only"] = True
 
         return Result(output, f"Supported dialects:\n{yamlize(output)}")
 
