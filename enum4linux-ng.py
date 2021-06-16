@@ -1985,7 +1985,7 @@ class EnumShares():
         if "tree connect failed: NT_STATUS_ACCESS_DENIED" in result.retmsg:
             return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
 
-        if "NT_STATUS_INVALID_INFO_CLASS" in result.retmsg or "NT_STATUS_NETWORK_ACCESS_DENIED" in result.retmsg:
+        if "NT_STATUS_INVALID_INFO_CLASS" in result.retmsg or "NT_STATUS_NETWORK_ACCESS_DENIED" in result.retmsg or "NT_STATUS_NOT_A_DIRECTORY" in result.retmsg:
             return Result({"mapping":"ok", "listing":"not supported"}, "Mapping: OK, Listing: NOT SUPPORTED")
 
         if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in result.retmsg:
