@@ -100,7 +100,7 @@ optional arguments:
   -L                 Get additional domain info via LDAP/LDAPS (for DCs only)
   -I                 Get printer information via RPC
   -R                 Enumerate users via RID cycling
-  -N                 Do an NetBIOS names lookup (similar to nbstat) and try to retrieve workgroup from output
+  -N                 Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output
   -w WORKGROUP       Specify workgroup/domain manually (usually found automatically)
   -u USER            Specify username to use (default "")
   -p PW              Specify password to use (default "")

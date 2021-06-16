@@ -2851,7 +2851,7 @@ def check_arguments():
     parser.add_argument("-L", action="store_true", help="Get additional domain info via LDAP/LDAPS (for DCs only)")
     parser.add_argument("-I", action="store_true", help="Get printer information via RPC")
     parser.add_argument("-R", action="store_true", help="Enumerate users via RID cycling")
-    parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbstat) and try to retrieve workgroup from output")
+    parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output")
     parser.add_argument("-w", dest="workgroup", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
     parser.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
