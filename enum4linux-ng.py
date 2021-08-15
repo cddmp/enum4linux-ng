@@ -1938,18 +1938,18 @@ class EnumShares():
         smbclient will open a connection to the Server Service Remote Protocol named pipe (srvsvc). Once connected
         it calls the NetShareEnumAll() to get a list of shares.
         '''
-        command = ["smbclient", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-L", f"//{self.target.host}"]
+        command = ["smbclient", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-L", f"//{self.target.host}", "-g"]
         result = run(command, "Attempting to get share list using authentication", self.target.samba_config)
 
         if not result.retval:
             return Result(None, f"Could not list shares: {result.retmsg}")
 
         shares = {}
-        match_list = re.findall(r"^\s*([\S]+)\s+(Device|Disk|IPC|Printer)[ \t]*([^\n]*)$", result.retmsg, re.MULTILINE|re.IGNORECASE)
+        match_list = re.findall(r"^(Device|Disk|IPC|Printer)\|(.*)\|(.*)$", result.retmsg, re.MULTILINE|re.IGNORECASE)
         if match_list:
             for entry in match_list:
-                share_name = entry[0]
-                share_type = entry[1]
+                share_type = entry[0]
+                share_name = entry[1]
                 share_comment = entry[2].rstrip()
                 shares[share_name] = {'type':share_type, 'comment':share_comment}
 
