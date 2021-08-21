@@ -190,6 +190,20 @@ OS_VERSIONS = {
         "5.0": "Windows 2000",
         }
 
+# Source: https://docs.microsoft.com/de-de/windows/release-health/release-information
+OS_RELEASE = {
+        "19042": "20H2",
+        "19041": "2004",
+        "18363": "1909",
+        "17763": "1809",
+        "17134": "1803",
+        "16299": "1709",
+        "15063": "1703",
+        "14393": "1607",
+        "10586": "1511",
+        "10240": "1507"
+        }
+
 # Filter for various samba client setup related error messages including bug
 # https://bugzilla.samba.org/show_bug.cgi?id=13925
 SAMBA_CLIENT_ERRORS = [
@@ -1134,7 +1148,7 @@ class EnumOsInfo():
         module_name = ENUM_OS_INFO
         print_heading(f"OS Information via RPC for {self.target.host}")
         output = {"os_info":None}
-        os_info = {"OS":None, "OS version":None, "OS build": None, "Native OS":None, "Native LAN manager": None, "Platform id":None, "Server type":None, "Server type string":None}
+        os_info = {"OS":None, "OS version":None, "OS release": None, "OS build": None, "Native OS":None, "Native LAN manager": None, "Platform id":None, "Server type":None, "Server type string":None}
 
         # Even an unauthenticated SMB session gives OS information about the target system, collect these first
         for port in self.target.smb_ports:
@@ -1231,7 +1245,7 @@ class EnumOsInfo():
         packet. This is the major and minor OS version as well as the build number. In SMBv1 also the "Native OS" as well as
         the "Native LAN Manager" will be reported.
         '''
-        os_info = {"OS version":None, "OS build":None, "Native LAN manager":None, "Native OS":None}
+        os_info = {"OS version":None, "OS release":None, "OS build":None, "Native LAN manager":None, "Native OS":None}
 
         os_major = None
         os_minor = None
@@ -1256,6 +1270,7 @@ class EnumOsInfo():
 
             if smb1_only:
                 os_info["OS build"] = "not supported"
+                os_info["OS release"] = "not supported"
 
             try:
                 native_lanman = smb_conn.getSMBServer().get_server_lanman()
@@ -1299,8 +1314,13 @@ class EnumOsInfo():
                 os_build = smb_conn.getServerOSBuild()
                 if os_build is not None:
                     os_info["OS build"] = f"{os_build}"
+                    if str(os_build) in OS_RELEASE:
+                        os_info["OS release"] = OS_RELEASE[f"{os_build}"]
+                    else:
+                        os_info["OS release"] = ""
                 else:
                     os_info["OS build"] = "not supported"
+                    os_info["OS release"] = "not supported"
             except:
                 pass
 
