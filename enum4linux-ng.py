@@ -225,6 +225,7 @@ SMB_DIALECTS = {
 # common errors. For very specific status errors, please don't handle them here but
 # in the corresponding enumeration class/function.
 NT_STATUS_COMMON_ERRORS = [
+        "STATUS_ACCOUNT_LOCKED_OUT",
         "STATUS_NO_LOGON_SERVERS",
         "STATUS_ACCESS_DENIED",
         "STATUS_LOGON_FAILURE",
