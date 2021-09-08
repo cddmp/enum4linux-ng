@@ -708,7 +708,8 @@ class EnumSmb():
                 SMB_DIALECTS[SMB2_DIALECT_21]:False,
                 SMB_DIALECTS[SMB2_DIALECT_30]:False,
                 "SMB1 only": False,
-                "Preferred Dialect": None
+                "Preferred Dialect": None,
+                "SMB signing required": None
         }
 
         smb_dialects = [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30]
@@ -718,6 +719,8 @@ class EnumSmb():
         try:
             smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             current_dialect = smb_conn.getDialect()
+            # Check whether SMB signing is required or optional - since this seems to be a global setting, we check it only for the preferred dialect
+            output["SMB signing required"] = smb_conn.isSigningRequired()
             smb_conn.close()
 
             # We found one supported dialect, this is also the dialect the remote host selected/preferred of the offered ones
@@ -753,7 +756,7 @@ class EnumSmb():
                 not output[SMB_DIALECTS[SMB2_DIALECT_30]]:
             output["SMB1 only"] = True
 
-        return Result(output, f"Supported dialects:\n{yamlize(output)}")
+        return Result(output, f"Supported dialects and settings:\n{yamlize(output)}")
 
 ### Session Checks
 
