@@ -708,7 +708,7 @@ class EnumSmb():
                 SMB_DIALECTS[SMB2_DIALECT_21]:False,
                 SMB_DIALECTS[SMB2_DIALECT_30]:False,
                 "SMB1 only": False,
-                "Preferred Dialect": None,
+                "Preferred dialect": None,
                 "SMB signing required": None
         }
 
@@ -725,7 +725,7 @@ class EnumSmb():
 
             # We found one supported dialect, this is also the dialect the remote host selected/preferred of the offered ones
             output[SMB_DIALECTS[current_dialect]] = True
-            output["Preferred Dialect"] = SMB_DIALECTS[current_dialect]
+            output["Preferred dialect"] = SMB_DIALECTS[current_dialect]
         except Exception as exc:
             # Currently the impacket library does not support SMB 3.02 and 3.11. Whenever a remote host only supports 3.02 or 3.11
             # we should end up here. This is somewhat vague, but better when nothing.
