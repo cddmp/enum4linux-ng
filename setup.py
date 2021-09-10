@@ -12,7 +12,7 @@ shutil.copyfile('enum4linux-ng.py', 'enum4linux-ng')
 
 setup(
     name='enum4linux-ng',
-    version='1.1',
+    version='1.1.0',
     author='mw',
     description='A next generation version of enum4linux',
     long_description=long_description,
