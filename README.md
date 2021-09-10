@@ -22,6 +22,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 - auto detection of IPC signing support
 - 'smart' enumeration will automatically disable tests which would otherwise fail
 - timeout support
+- SMB dialect checks
 - IPv6 support (experimental)
 
 ## Differences
