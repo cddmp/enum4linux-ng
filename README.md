@@ -117,7 +117,26 @@ optional arguments:
   -oA OUT_FILE       Writes output to YAML and JSON file (extensions are added automatically)
 ```
 
-## Installing dependencies
+## Installation
+There are multiple ways to install the tool. Either the tool comes as a package with your Linux distribution or you need to do a manual install. 
+
+### Automatic Installation
+I'm aware of the following Linux distributions which package the tool:
+
+#### Archstrike
+
+```console
+$ pacman -S enum4linux-ng
+```
+
+#### NixOS
+(tested on NixOS 20.9)
+
+```console
+$ nix-env -iA nixos.enum4linux-ng
+```
+### Manual Installation
+#### Dependencies
 The tool uses the samba clients tools, namely:
 - nmblookup
 - net
@@ -136,36 +155,29 @@ For a faster processing of YAML (optional!) also install (should come as a depen
 
 Some examples for specific Linux distributions installations are listed below. Alternatively, distribution-agnostic ways (python pip, python virtual env and Docker) are possible.
 
-### Linux distribution specific
+#### Linux distribution specific 
 For all distribution examples below, LibYAML is already a dependency of the corresponding PyYaml package and will be therefore installed automatically.
-#### ArchLinux
+##### ArchLinux
 
 ```console
 #  pacman -S smbclient python-ldap3 python-yaml impacket
 ```
-#### Fedora/CentOS/RHEL
+##### Fedora/CentOS/RHEL
 (tested on Fedora Workstation 31)
 
 ```console
 # dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
 ```
 
-#### Kali Linux/Debian/Ubuntu 
+##### Kali Linux/Debian/Ubuntu 
 (tested on Kali Linux 2020.1, recent Debian (e.g. Buster) or Ubuntu versions should work, for Ubuntu 18.04 or below use the Docker or Python virtual environment variant)
 
 ```console
 # apt install smbclient python3-ldap3 python3-yaml python3-impacket
 ```
 
-#### NixOS
-(tested on NixOS 20.9)
-
-```console
-$ nix-env -iA nixos.enum4linux-ng
-```
-
-### Linux distribution-agnostic
-#### Python pip
+#### Linux distribution-agnostic
+##### Python pip
 Depending on the Linux distribution either `pip3` or `pip` is needed:
 
 ```console
@@ -180,7 +192,7 @@ $ pip install -r requirements.txt
 
 Remember you need to still install the samba tools as mentioned above.
 
-#### Python virtual environment
+##### Python virtual environment
 ```console
 $ git clone https://github.com/cddmp/enum4linux-ng
 $ cd enum4linux-ng
@@ -195,7 +207,7 @@ Then run via:
 
 Remember you need to still install the samba tools as mentioned above. In addition, make sure you run ```source venv/bin/activate``` everytime you spawn a new shell. Otherwise the wrong Python interpreter with the wrong libraries will be used (your system one rather than the virtual environment one).
 
-#### Docker
+##### Docker
 ```console
 $ git clone https://github.com/cddmp/enum4linux-ng
 $ docker build enum4linux-ng --tag enum4linux-ng
