@@ -2314,6 +2314,10 @@ class EnumPrinters():
         if "No printers returned." in result.retmsg:
             return Result({}, "No printers returned (this is not an error)")
 
+        nt_status_error = nt_status_error_filter(result.retmsg)
+        if nt_status_error:
+            return Result(None, f"Could not get printers via 'enumprinters': {nt_status_error}")
+
         match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", result.retmsg, re.MULTILINE)
         if not match_list:
             return Result(None, "Could not parse result of enumprinters command, please open a GitHub issue")
