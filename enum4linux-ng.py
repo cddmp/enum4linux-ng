@@ -464,6 +464,9 @@ class SambaTool():
         return Result(True, output)
 
 class SambaSmbclient(SambaTool):
+    '''
+    Encapsulates a subset of the functionality of the Samba smbclient command.
+    '''
     def __init__(self, command, target, creds):
         super().__init__(command, target, creds)
 
@@ -481,6 +484,9 @@ class SambaSmbclient(SambaTool):
         self.exec = ['smbclient'] + self.exec
 
 class SambaRpcclient(SambaTool):
+    '''
+    Encapsulates a subset of the functionality of the Samba rpcclient command.
+    '''
     def __init__(self, command, target, creds):
         super().__init__(command, target, creds)
 
@@ -513,6 +519,9 @@ class SambaRpcclient(SambaTool):
         self.exec = ['rpcclient'] + self.exec
 
 class SambaNet(SambaTool):
+    '''
+    Encapsulates a subset of the functionality of the Samba net command.
+    '''
     def __init__(self, command, target, creds):
         super().__init__(command, target, creds)
 
@@ -533,8 +542,11 @@ class SambaNet(SambaTool):
         self.exec = ['net'] + self.exec
 
 class SambaNmblookup(SambaTool):
-    def __init__(self, command, target):
-        super().__init__(command, target, creds=None)
+    '''
+    Encapsulates the nmblookup command. Currently only the -A option is supported.
+    '''
+    def __init__(self, target):
+        super().__init__(None, target, creds=None)
 
         self.exec += [ "-A", target.host ]
         self.exec = ['nmblookup'] + self.exec
@@ -735,10 +747,8 @@ class EnumNetbios():
         '''
         Runs nmblookup (a NetBIOS over TCP/IP Client) in order to lookup NetBIOS names information.
         '''
-        #command = ["nmblookup", "-A", self.target.host]
-        #result = run(command, "Trying to get NetBIOS names information", timeout=self.target.timeout)
 
-        result = SambaNmblookup(['iplookup'], self.target).run(log='Trying to get NetBIOS names information')
+        result = SambaNmblookup(self.target).run(log='Trying to get NetBIOS names information')
 
         if not result.retval:
             return Result(None, f"Could not get NetBIOS names information via 'nmblookup': {result.retmsg}")
