@@ -1811,7 +1811,7 @@ class EnumGroupsRpc():
         result = SambaRpcclient([grouptype_dict[grouptype]], self.target, self.creds).run(log='Attempting to get {grouptype} groups')
 
         if not result.retval:
-            return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}'")
+            return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': {result.retmsg}")
 
         return Result(result.retmsg, "")
 
