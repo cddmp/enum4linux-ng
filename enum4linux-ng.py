@@ -1391,7 +1391,7 @@ class EnumOsInfo():
             output = process_error(f"Skipping 'srvinfo' run, not possible with provided credentials", ["os_info"], module_name, output)
 
         # Take all collected information and generate os_info entry
-        if result_smb.retval or (self.target.sessions[self.target.sessions[self.creds.auth_method]] and result_srvinfo.retval):
+        if result_smb.retval or (self.target.sessions[self.creds.auth_method] and result_srvinfo.retval):
             os_info = self.os_info_to_human(os_info)
             print_success(f"After merging OS information we have the following result:\n{yamlize(os_info)}")
             output["os_info"] = os_info
