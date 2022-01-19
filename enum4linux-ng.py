@@ -36,32 +36,40 @@
 #         => an error happened, error messages will be printed out and will end up in the JSON/YAML with value
 #            null (see also YAML/JSON below)
 #
-#       * return value is False for...
-#         ...'session_possible'
-#         => error, it was not possible to setup a session with the target, therefore any subsequent module runs were
-#            omitted
-#       * ...'services'-->'accessible'
-#         => error, it was not possible to setup a service connection
-#         => all other booleans are not errors
-#
-#       * return value is empty [],{},""
+#       * return value is an empty [],{},""
 #         => no error, nothing was returned (e.g. a group has no members)
+#
+#       * return value is False for...
+#         - sessions:
+#         => it was not possible to set up the particular session with the target
+#         - services:
+#         => error, it was not possible to setup a service connection
+#         - all other booleans:
+#         => no errors
 #
 # * YAML/JSON:
 #       * null
-#         => an error happened (see above, a function returned None which translates to null in JSON/YAML) - in
+#         => an error happened (i.e. a function returned None which translates to null in JSON/YAML), in
 #            this case an error message was generated and can be found under:
-#            'errors' -> key for which the error happened (e.g. os_info) -> module name where the error occured
+#            - 'errors', <key> for which the error happened (e.g. os_info), <module name> where the error occured
 #            (e.g. module_srvinfo)
 #
 #       * missing key
 #         => either it was not part of the enumeration because the user did not request it (aka did not provide
 #            the right parameter when running enum4linux-ng)
-#         => or it was part of the enumeration but no session could be set up (see above), in this case the
-#            'session_possible' should be 'False'
+#         => or it was part of the enumeration but no session could be set up (see above), in this case
+#            - 'sessions', 'sessions_possible' should be 'False'
+#
+# Authentication
+# ==============
+# * Kerberos:
+#       * While testing Kerberos authentication with the Samba client tools and the impacket library, it turned
+#         out that they behave quite differently. While the impacket library will honor the username and the domain
+#         given, it seems that the Samba client ignores them (-U and -W parameter) and uses the ones from the ticket
+#         itself. Surprisingly, the Samba client tools will fail authentication if no user is given.
 #
 ### LICENSE
-# This tool may be used for legal purposes only.  Users take full responsibility
+# This tool may be used for legal purposes only. Users take full responsibility
 # for any actions performed using this tool. The author accepts no liability
 # for damage caused by this tool. If these terms are not acceptable to you, then
 # you are not permitted to use this tool.
@@ -244,7 +252,9 @@ NT_STATUS_COMMON_ERRORS = [
     ]
 
 # Supported authentification methods
-AUTH_PASSWORD = "Password"
+AUTH_PASSWORD = "password"
+AUTH_KERBEROS = "kerberos"
+AUTH_NULL = "null"
 
 # Mapping from errno to string for socket errors we often come across
 SOCKET_ERRORS = {
@@ -341,23 +351,28 @@ class Target:
     passed during the enumeration to the various modules. This allows to modify/update target information
     during enumeration.
     '''
-    def __init__(self, host, workgroup, port=None, timeout=None, tls=None, samba_config=None, sessions=False):
+    def __init__(self, host, workgroup, auth_method=None, port=None, timeout=None, tls=None, samba_config=None, sessions={}):
         self.host = host
         self.port = port
         self.workgroup = workgroup
         self.timeout = timeout
         self.tls = tls
         self.samba_config = samba_config
+        self.auth_method = auth_method
         self.sessions = sessions
+
         self.workgroup_from_long_domain = False
+        # FIXME: The long_domain might be useful for Kerberos, but we do not use it a the moment
+        self.long_domain = ''
         self.ip_version = None
         self.smb_ports = []
         self.ldap_ports = []
         self.services = []
         self.smb_dialects = []
 
-        if not self.valid_host(host):
-            raise Exception()
+        result = self.valid_host(host)
+        if not result.retval:
+            raise Exception(result.retmsg)
 
     def update_workgroup(self, workgroup, long_domain=False):
         # Occassionally lsaquery would return a slightly different domain name than LDAP, e.g.
@@ -368,6 +383,7 @@ class Target:
         if self.workgroup_from_long_domain:
             return
         if long_domain:
+            self.long_domain = workgroup
             self.workgroup = workgroup.split('.')[0]
             self.workgroup_from_long_domain = True
         else:
@@ -376,15 +392,24 @@ class Target:
     def valid_host(self, host):
         try:
             result = socket.getaddrinfo(host, None)
-            if result[0][0] == socket.AF_INET6:
+
+            # Check IP version, alternatively we could save the socket type here
+            ip_version = result[0][0]
+            if ip_version == socket.AF_INET6:
                 self.ip_version = 6
-                return True
-            if result[0][0] == socket.AF_INET:
+            elif ip_version == socket.AF_INET:
                 self.ip_version = 4
-                return True
-        except:
-            pass
-        return False
+
+            # Kerberos requires resolvable hostnames rather than IP adresses
+            ip = result[0][4][0]
+            if ip == host and self.auth_method == AUTH_KERBEROS:
+                return Result(False, f'Kerberos authentication requires a hostname, but an IPv{self.ip_version} address was given')
+
+            return Result(True,'')
+        except Exception as e:
+            if isinstance(e, OSError) and e.errno == -2:
+                return Result(False, f'Could not resolve host {host}')
+        return Result(False, f'No valid host given')
 
     def as_dict(self):
         return {'target':{'host':self.host, 'workgroup':self.workgroup}}
@@ -393,17 +418,30 @@ class Credentials:
     '''
     Stores usernames and password.
     '''
-    def __init__(self, user, pw, auth_method):
+    def __init__(self, user='', pw='', ticket_file=''):
         # Create an alternative user with pseudo-random username
         self.random_user = ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(8))
         self.user = user
         self.pw = pw
+        self.ticket_file = ticket_file
 
-        # Set authentication type
-        self.auth_method = auth_method
+        if ticket_file:
+            result = self.valid_ticket(ticket_file)
+            if not result.retval:
+                raise Exception(result.retmsg)
+            self.auth_method = AUTH_KERBEROS
+        elif not user and not pw:
+            self.auth_method = AUTH_NULL
+        else:
+            if pw and not user:
+                raise Exception("Password given (-p) without any user, please provide a username (-u)")
+            self.auth_method = AUTH_PASSWORD
+
+    def valid_ticket(self, ticket_file):
+        return valid_file(ticket_file)
 
     def as_dict(self):
-        return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'random_user':self.random_user})}
+        return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'ticket_file':self.ticket_file, 'random_user':self.random_user})}
 
 
 class SambaTool():
@@ -413,16 +451,24 @@ class SambaTool():
 
     def __init__(self, command, target, creds):
         self.target = target
+        self.creds = creds
+        self.env = None
 
         # This list stores the various parts of the command which will be later executed by run().
         self.exec = []
 
-        # Add workgroup
-        self.exec += ['-W', f'{target.workgroup}']
-
-        # Set auth method
-        if creds and creds.auth_method is AUTH_PASSWORD:
-            self.exec += ['-U', f'{creds.user}%{creds.pw}']
+        # Set authentication method
+        if self.creds:
+            if creds.ticket_file:
+                # Set KRB5CCNAME as environment variable and let it point to the ticket.
+                # The environment will be later passed to check_output() (see run() below).
+                self.env = os.environ.copy()
+                self.env['KRB5CCNAME'] = self.creds.ticket_file
+                # User is taken from the ticket
+                self.exec += ['-k']
+            else:
+                self.exec += ['-W', f'{target.workgroup}']
+                self.exec += ['-U', f'{self.creds.user}%{self.creds.pw}']
 
         # If the target has a custom Samba configuration attached, we will add it to the
         # command. This allows to modify the behaviour of the samba client commands during
@@ -439,7 +485,7 @@ class SambaTool():
             print_verbose(f"{log}, running command: {' '.join(shlex.quote(x) for x in self.exec)}")
 
         try:
-            output = check_output(self.exec, shell=False, stderr=STDOUT, timeout=self.target.timeout)
+            output = check_output(self.exec, env=self.env, shell=False, stderr=STDOUT, timeout=self.target.timeout)
             retval = 0
         except TimeoutExpired:
             return Result(False, "timed out")
@@ -538,7 +584,7 @@ class SambaNet(SambaTool):
                 if command[2] == 'list':
                     self.exec += [f'{command[0]}', f'{ command[1]}', f'{command[2]}']
 
-        self.exec += [ "-I", target.host ]
+        self.exec += [ "-S", target.host ]
         self.exec = ['net'] + self.exec
 
 class SambaNmblookup(SambaTool):
@@ -917,6 +963,7 @@ class EnumSessions():
     SESSION_USER = "user"
     SESSION_RANDOM = "random user"
     SESSION_NULL = "null"
+    SESSION_KERBEROS="Kerberos"
 
     def __init__(self, target, creds):
 
@@ -929,48 +976,64 @@ class EnumSessions():
         '''
         module_name = ENUM_SESSIONS
         print_heading(f"RPC Session Check on {self.target.host}")
-        output = {"sessions_possible":False,
-                  "null_session_possible":False,
-                  "user_session_possible":False,
-                  "random_user_session_possible":False}
+        output = { "sessions":None }
+        sessions = {"sessions_possible":False,
+                  AUTH_NULL:False,
+                  AUTH_PASSWORD:False,
+                  AUTH_KERBEROS:False,
+                  "random_user":False,
+                  }
 
         # Check null session
         print_info("Check for null session")
-        null_session = self.check_user_session(Credentials('', '', AUTH_PASSWORD), self.SESSION_NULL)
+        null_session = self.check_session(Credentials(), self.SESSION_NULL)
         if null_session.retval:
-            output["null_session_possible"] = True
+            sessions[AUTH_NULL] = True
             print_success(null_session.retmsg)
         else:
-            output = process_error(null_session.retmsg, ["null_session_possible"], module_name, output)
+            output = process_error(null_session.retmsg, ["sessions"], module_name, output)
 
-        # Check user session
-        if self.creds.user:
+        # Check Kerberos session
+        if self.creds.ticket_file:
+            print_info("Check for Kerberos session")
+            kerberos_session = self.check_session(self.creds, self.SESSION_KERBEROS)
+            if kerberos_session.retval:
+                sessions[AUTH_KERBEROS] = True
+                print_success(kerberos_session.retmsg)
+            else:
+                output = process_error(kerberos_session.retmsg, ["sessions"], module_name, output)
+        # Check for user session
+        elif self.creds.user:
             print_info("Check for user session")
-            user_session = self.check_user_session(self.creds, self.SESSION_USER)
+            user_session = self.check_session(self.creds, self.SESSION_USER)
             if user_session.retval:
-                output["user_session_possible"] = True
+                sessions[AUTH_PASSWORD] = True
                 print_success(user_session.retmsg)
             else:
-                output = process_error(user_session.retmsg, ["user_session_possible"], module_name, output)
+                output = process_error(user_session.retmsg, ["sessions"], module_name, output)
 
         # Check random user session
-        print_info("Check for random user session")
-        user_session = self.check_user_session(Credentials(self.creds.random_user, self.creds.pw, AUTH_PASSWORD), self.SESSION_RANDOM)
+        print_info("Check for random user")
+        user_session = self.check_session(Credentials(self.creds.random_user, self.creds.pw), self.SESSION_RANDOM)
         if user_session.retval:
-            output["random_user_session_possible"] = True
+            sessions["random_user"] = True
             print_success(user_session.retmsg)
             print_hint(f"Rerunning enumeration with user '{self.creds.random_user}' might give more results")
         else:
-            output = process_error(user_session.retmsg, ["random_user_session_possible"], module_name, output)
+            output = process_error(user_session.retmsg, ["sessions"], module_name, output)
 
-        if output["null_session_possible"] or output["user_session_possible"] or output["random_user_session_possible"]:
-            output["sessions_possible"] = True
+        if sessions[AUTH_NULL] or \
+            sessions[AUTH_PASSWORD] or \
+            sessions[AUTH_KERBEROS] or \
+            sessions["random_user"]:
+            sessions["sessions_possible"] = True
         else:
-            process_error("Sessions failed, neither null nor user sessions were possible", ["sessions_possible", "null_session_possible", "user_session_possible", "random_user_session_possible"], module_name, output)
+            process_error("Sessions failed, neither null nor user sessions were possible", ["sessions"], module_name, output)
 
+        output['sessions'] = sessions
         return output
 
-    def check_user_session(self, creds, session_type):
+    def check_session(self, creds, session_type):
         '''
         Tests access to the IPC$ share.
 
@@ -996,6 +1059,8 @@ class EnumSessions():
             return Result(False, f"Could not establish {session_type} session: {result.retmsg}")
 
         if "case_sensitive" in result.retmsg:
+            if session_type == self.SESSION_KERBEROS:
+                return Result(True, f"Server allows Kerberos session using '{creds.ticket_file}'")
             return Result(True, f"Server allows session using username '{creds.user}', password '{creds.pw}'")
         return Result(False, f"Could not establish session using '{creds.user}', password '{creds.pw}'")
 
@@ -1313,7 +1378,7 @@ class EnumOsInfo():
 
         # If the earlier checks for RPC users sessions succeeded, we can continue by enumerating info via rpcclient's srvinfo
         print_info("Enumerating via 'srvinfo'")
-        if self.target.sessions:
+        if self.target.sessions[self.creds.auth_method]:
             result_srvinfo = self.enum_from_srvinfo()
             if result_srvinfo.retval:
                 print_success(result_srvinfo.retmsg)
@@ -1323,10 +1388,10 @@ class EnumOsInfo():
             if result_srvinfo.retval is not None:
                 os_info = {**os_info, **result_srvinfo.retval}
         else:
-            output = process_error("Skipping 'srvinfo' run, null or user session required", ["os_info"], module_name, output)
+            output = process_error(f"Skipping 'srvinfo' run, not possible with provided credentials", ["os_info"], module_name, output)
 
         # Take all collected information and generate os_info entry
-        if result_smb.retval or (self.target.sessions and result_srvinfo.retval):
+        if result_smb.retval or (self.target.sessions[self.target.sessions[self.creds.auth_method]] and result_srvinfo.retval):
             os_info = self.os_info_to_human(os_info)
             print_success(f"After merging OS information we have the following result:\n{yamlize(os_info)}")
             output["os_info"] = os_info
@@ -1808,7 +1873,7 @@ class EnumGroupsRpc():
         if grouptype not in ["builtin", "domain", "local"]:
             return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
 
-        result = SambaRpcclient([grouptype_dict[grouptype]], self.target, self.creds).run(log='Attempting to get {grouptype} groups')
+        result = SambaRpcclient([grouptype_dict[grouptype]], self.target, self.creds).run(log=f'Attempting to get {grouptype} groups')
 
         if not result.retval:
             return Result(None, f"Could not get groups via '{grouptype_dict[grouptype]}': {result.retmsg}")
@@ -2327,15 +2392,31 @@ class EnumPolicy():
         '''
         Tries to connect to the SAMR named pipe and get the domain handle.
         '''
+
+        # Take a backup of the environment, in case we modify it for Kerberos
+        env = os.environ.copy()
         try:
             smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            smb_conn.login(self.creds.user, self.creds.pw, self.target.workgroup)
+            if self.creds.ticket_file:
+                os.environ['KRB5CCNAME'] = self.creds.ticket_file
+                # FIXME: This could cause trouble - not sure if it is good:
+                # It turns out that the Samba tools can handle an invalid user (it seems they just use the user from the ticket).
+                # impacket will enforce the given user, which might then lead to an error, if it does not match the ticket one.
+                # Therefore, we let impacket extract the user from the ticket. The same approach is used for the domain.
+                smb_conn.kerberosLogin('', self.creds.pw, domain='', useCache=True)
+            else:
+                smb_conn.login(self.creds.user, self.creds.pw, self.target.workgroup)
+
             rpctransport = transport.SMBTransport(smb_connection=smb_conn, filename=r'\samr', remoteName=self.target.host)
             dce = DCERPC_v5(rpctransport)
             dce.connect()
             dce.bind(samr.MSRPC_UUID_SAMR)
         except Exception as e:
             return Result((None, None), process_impacket_smb_exception(e, self.target))
+        finally:
+            # Restore environment in any case
+            os.environ.clear()
+            os.environ.update(env)
 
         try:
             resp = samr.hSamrConnect2(dce)
@@ -2455,6 +2536,9 @@ class EnumPrinters():
         nt_status_error = nt_status_error_filter(result.retmsg)
         if nt_status_error:
             return Result(None, f"Could not get printers via 'enumprinters': {nt_status_error}")
+        #FIXME: It seems as this error has disappered in newer versions?
+        if "WERR_INVALID_NAME" in result.retmsg:
+            return Result(None, f"Could not get printers via 'enumprinters': WERR_INVALID_NAME")
 
         match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", result.retmsg, re.MULTILINE)
         if not match_list:
@@ -2532,10 +2616,10 @@ class Enumerator():
 
         # Init target and creds
         try:
-            self.creds = Credentials(args.user, args.pw, args.auth_method)
-            self.target = Target(args.host, args.workgroup, timeout=args.timeout)
-        except:
-            raise RuntimeError(f'Target {args.host} is not a valid IP or could not be resolved')
+            self.creds = Credentials(args.user, args.pw, args.ticket_file)
+            self.target = Target(args.host, args.workgroup, self.creds.auth_method, timeout=args.timeout)
+        except Exception as e:
+            raise RuntimeError(str(e))
 
         # Init default SambaConfig, make sure 'client ipc signing' is not required
         try:
@@ -2597,7 +2681,7 @@ class Enumerator():
         self.target.ldap_ports = scanner.get_accessible_ports_by_pattern("LDAP")
         return scanner.get_accessible_services()
 
-    def get_modules(self, services, sessions=True):
+    def get_modules(self, services, session=True):
         modules = []
         if self.args.N:
             modules.append(ENUM_NETBIOS)
@@ -2608,16 +2692,16 @@ class Enumerator():
 
         if SERVICE_SMB in services or SERVICE_SMB_NETBIOS in services:
             modules.append(ENUM_SMB)
-            modules.append(ENUM_SESSIONS)
             modules.append(ENUM_SMB_DOMAIN_INFO)
+            modules.append(ENUM_SESSIONS)
 
             # The OS info module supports both session-less (unauthenticated) and session-based (authenticated)
-            # enumeration. Therefore, we can run it even if no sessions were possible...
+            # enumeration. Therefore, we can run it even if no session was possible...
             if self.args.O:
                 modules.append(ENUM_OS_INFO)
 
             # ...the remaining modules still need a working session.
-            if sessions:
+            if session:
                 modules.append(ENUM_LSAQUERY_DOMAIN_INFO)
                 if self.args.U:
                     modules.append(ENUM_USERS_RPC)
@@ -2660,16 +2744,21 @@ class Enumerator():
             result = EnumSmb(self.target, self.args.d).run()
             self.output.update(result)
 
-        # Check for user credential and null sessions
+        # Try to get domain name and sid via lsaquery
+        if ENUM_SMB_DOMAIN_INFO in modules:
+            result = EnumSmbDomainInfo(self.target, self.creds).run()
+            self.output.update(result)
+
+        # Check for various session types including null sessions
         if ENUM_SESSIONS in modules:
             result = EnumSessions(self.target, self.creds).run()
             self.output.update(result)
-            self.target.sessions = self.output.as_dict()['sessions_possible']
+            self.target.sessions = self.output.as_dict()['sessions']
 
         # If sessions are not possible, we regenerate the list of modules again.
         # This will only leave those modules in, which don't require authentication.
-        if not self.target.sessions:
-            modules = self.get_modules(self.target.services, self.target.sessions)
+        if self.target.sessions and not self.target.sessions[self.creds.auth_method]:
+            modules = self.get_modules(self.target.services, session=False)
 
         # Try to get domain name and sid via lsaquery
         if ENUM_LSAQUERY_DOMAIN_INFO in modules:
@@ -2677,11 +2766,6 @@ class Enumerator():
             self.output.update(result)
             if not self.target.workgroup and result["workgroup"]:
                 self.target.update_workgroup(result["workgroup"])
-
-        # Try to get domain name and sid via lsaquery
-        if ENUM_SMB_DOMAIN_INFO in modules:
-            result = EnumSmbDomainInfo(self.target, self.creds).run()
-            self.output.update(result)
 
         # Get OS information like os version, server type string...
         if ENUM_OS_INFO in modules:
@@ -2732,7 +2816,9 @@ class Enumerator():
 
         if not self.target.services:
             warn("Aborting remainder of tests since neither SMB nor LDAP are accessible")
-        elif not self.target.sessions:
+        elif self.target.sessions['sessions_possible'] and not self.target.sessions[self.creds.auth_method]:
+                warn("Aborting remainder of tests, sessions are possible, but not with the provided credentials (see session check results)")
+        elif not self.target.sessions['sessions_possible']:
             if SERVICE_SMB not in self.target.services and SERVICE_SMB_NETBIOS not in self.target.services:
                 warn("Aborting remainder of tests since SMB is not accessible")
             else:
@@ -2811,11 +2897,9 @@ def valid_shares_file(shares_file):
     fault_shares = []
     NL = '\n'
 
-    if not os.path.exists(shares_file):
-        return Result(False, f"Shares file {shares_file} does not exist")
-
-    if os.stat(shares_file).st_size == 0:
-        return Result(False, f"Shares file {shares_file} is empty")
+    result = valid_file(shares_file)
+    if not result.retval:
+        return result
 
     try:
         with open(shares_file) as f:
@@ -2852,6 +2936,20 @@ def valid_workgroup(workgroup):
     if re.match(r"^[A-Za-z0-9_\.-]+$", workgroup):
         return True
     return False
+
+def valid_file(file):
+    if not os.path.exists(file):
+        return Result(False, f'File {file} does not exist')
+
+    if os.stat(file).st_size == 0:
+        return Result(False, f'File {file} is empty')
+
+    try:
+        f = open(file)
+    except IOError:
+        return Result(False, f'Could not open {file}')
+    f.close()
+    return Result(True, '')
 
 ### Print Functions and Error Processing
 
@@ -2987,7 +3085,9 @@ def check_arguments():
     parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output")
     parser.add_argument("-w", dest="workgroup", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
-    parser.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
+    auth_methods = parser.add_mutually_exclusive_group()
+    auth_methods.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
+    auth_methods.add_argument("-K", dest="ticket_file", default='', type=str, help="Try to authenticate with Kerberos, only useful in Active Directory environment")
     parser.add_argument("-d", action="store_true", help="Get detailed information for users and groups, applies to -U, -G and -R")
     parser.add_argument("-k", dest="users", default=KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {KNOWN_USERNAMES}).\nUsed to get sid with "lookupsids"')
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
@@ -3030,9 +3130,9 @@ def check_arguments():
 
     # Check shares file
     if args.shares_file:
-        validation = valid_shares_file(args.shares_file)
-        if not validation.retval:
-            raise RuntimeError(validation.retmsg)
+        result = valid_shares_file(args.shares_file)
+        if not result.retval:
+            raise RuntimeError(result.retmsg)
 
     # Add given users to list of RID cycle users automatically
     if args.user and args.user not in args.users.split(","):
@@ -3042,9 +3142,6 @@ def check_arguments():
     if not valid_timeout(args.timeout):
         raise RuntimeError("Timeout must be a valid integer in the range 1-600")
     args.timeout = int(args.timeout)
-
-    # Check authentication method
-    args.auth_method = AUTH_PASSWORD
 
     return args
 
