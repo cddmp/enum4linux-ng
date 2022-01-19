@@ -66,7 +66,7 @@
 #       * While testing Kerberos authentication with the Samba client tools and the impacket library, it turned
 #         out that they behave quite differently. While the impacket library will honor the username and the domain
 #         given, it seems that the Samba client ignores them (-U and -W parameter) and uses the ones from the ticket
-#         itself. Surprisingly, the Samba client tools will fail authentication if no user is given.
+#         itself.
 #
 ### LICENSE
 # This tool may be used for legal purposes only. Users take full responsibility
