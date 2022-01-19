@@ -242,6 +242,7 @@ NT_STATUS_COMMON_ERRORS = [
         "STATUS_NETWORK_UNREACHABLE",
         "STATUS_INVALID_PARAMETER",
         "STATUS_NOT_SUPPORTED",
+        "STATUS_NO_SUCH_FILE",
         # This is a rather strange status which needs more examination and might be
         # removed from here in the future.
         "STATUS_CONNECTION_DISCONNECTED",
