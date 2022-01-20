@@ -252,7 +252,7 @@ NT_STATUS_COMMON_ERRORS = [
         "ERRSRV:ERRaccess"
     ]
 
-# Supported authentification methods
+# Supported authentication methods
 AUTH_PASSWORD = "password"
 AUTH_KERBEROS = "kerberos"
 AUTH_NULL = "null"
