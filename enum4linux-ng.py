@@ -606,10 +606,9 @@ class SambaConfig:
     '''
     def __init__(self, entries):
         config = '\n'.join(['[global]']+entries) + '\n'
-        config_file = tempfile.NamedTemporaryFile(delete=False)
-        config_file.write(config.encode())
-        self.config_filename = config_file.name
-        config_file.close()
+        with tempfile.NamedTemporaryFile(delete=False) as config_file:
+            config_file.write(config.encode())
+            self.config_filename = config_file.name
 
     def get_path(self):
         return self.config_filename
@@ -617,9 +616,8 @@ class SambaConfig:
     def add(self, entries):
         try:
             config = '\n'.join(entries) + '\n'
-            config_file = open(self.config_filename, 'a')
-            config_file.write(config)
-            config_file.close()
+            with open(self.config_filename, 'a') as config_file:
+                config_file.write(config)
             return True
         except:
             return False
@@ -680,18 +678,16 @@ class Output:
 
     def _write_json(self):
         try:
-            f = open(f"{self.out_file}.json", 'w')
-            f.write(json.dumps(self.out_dict, indent=4))
-            f.close()
+            with open(f"{self.out_file}.json", 'w') as f:
+                f.write(json.dumps(self.out_dict, indent=4))
         except OSError:
             return False
         return True
 
     def _write_yaml(self):
         try:
-            f = open(f"{self.out_file}.yaml", 'w')
-            f.write(yamlize(self.out_dict, rstrip=False))
-            f.close()
+            with open(f"{self.out_file}.yaml", 'w') as f:
+                f.write(yamlize(self.out_dict, rstrip=False))
         except OSError:
             return False
         return True
@@ -2935,18 +2931,19 @@ def valid_workgroup(workgroup):
         return True
     return False
 
-def valid_file(file):
+def valid_file(file, mode=os.R_OK):
     if not os.path.exists(file):
         return Result(False, f'File {file} does not exist')
 
     if os.stat(file).st_size == 0:
         return Result(False, f'File {file} is empty')
 
-    try:
-        f = open(file)
-    except IOError:
-        return Result(False, f'Could not open {file}')
-    f.close()
+    if not os.access(file, mode):
+        if mode == os.R_OK:
+            return Result(False, f'Cannot read file {file}')
+        if mode == os.W_OK:
+            return Result(False, f'Cannot write file {file}')
+
     return Result(True, '')
 
 ### Print Functions and Error Processing
