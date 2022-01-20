@@ -410,7 +410,7 @@ class Target:
         except Exception as e:
             if isinstance(e, OSError) and e.errno == -2:
                 return Result(False, f'Could not resolve host {host}')
-        return Result(False, f'No valid host given')
+        return Result(False, 'No valid host given')
 
     def as_dict(self):
         return {'target':{'host':self.host, 'workgroup':self.workgroup}}
@@ -756,7 +756,7 @@ class ServiceScan():
         accessible = []
         for service, entry in self.services.items():
             if pattern in service and entry["accessible"] is True:
-                accessible.append(self.services[service]["port"])
+                accessible.append(entry["port"])
         return accessible
 
 ### NetBIOS Enumeration
@@ -947,7 +947,7 @@ class EnumSmb():
                 smb_conn.close()
                 if current_dialect == preferred_dialect:
                     output[SMB_DIALECTS[current_dialect]] = True
-            except Exception as exc:
+            except Exception:
                 pass
 
         if output[SMB_DIALECTS[SMB_DIALECT]] and \
@@ -1145,7 +1145,7 @@ class EnumLdapDomainInfo():
         try:
             if not server.info.naming_contexts:
                 return Result([], "NamingContexts are not readable")
-        except Exception as e:
+        except Exception:
             return Result([], "NamingContexts are not readable")
 
         return Result(server.info.naming_contexts, "")
@@ -1389,7 +1389,7 @@ class EnumOsInfo():
             if result_srvinfo.retval is not None:
                 os_info = {**os_info, **result_srvinfo.retval}
         else:
-            output = process_error(f"Skipping 'srvinfo' run, not possible with provided credentials", ["os_info"], module_name, output)
+            output = process_error("Skipping 'srvinfo' run, not possible with provided credentials", ["os_info"], module_name, output)
 
         # Take all collected information and generate os_info entry
         if result_smb.retval or (self.target.sessions[self.creds.auth_method] and result_srvinfo.retval):
@@ -2536,7 +2536,7 @@ class EnumPrinters():
             return Result(None, f"Could not get printers via 'enumprinters': {nt_status_error}")
         #FIXME: It seems as this error has disappered in newer versions?
         if "WERR_INVALID_NAME" in result.retmsg:
-            return Result(None, f"Could not get printers via 'enumprinters': WERR_INVALID_NAME")
+            return Result(None, "Could not get printers via 'enumprinters': WERR_INVALID_NAME")
 
         match_list = re.findall(r"\s*flags:\[([^\n]*)\]\n\s*name:\[([^\n]*)\]\n\s*description:\[([^\n]*)\]\n\s*comment:\[([^\n]*)\]", result.retmsg, re.MULTILINE)
         if not match_list:
@@ -2815,7 +2815,7 @@ class Enumerator():
         if not self.target.services:
             warn("Aborting remainder of tests since neither SMB nor LDAP are accessible")
         elif self.target.sessions['sessions_possible'] and not self.target.sessions[self.creds.auth_method]:
-                warn("Aborting remainder of tests, sessions are possible, but not with the provided credentials (see session check results)")
+            warn("Aborting remainder of tests, sessions are possible, but not with the provided credentials (see session check results)")
         elif not self.target.sessions['sessions_possible']:
             if SERVICE_SMB not in self.target.services and SERVICE_SMB_NETBIOS not in self.target.services:
                 warn("Aborting remainder of tests since SMB is not accessible")
@@ -2872,7 +2872,7 @@ class Enumerator():
 def valid_timeout(timeout):
     try:
         timeout = int(timeout)
-        if timeout >= 1 and timeout <= 600:
+        if 1 <= timeout <= 600:
             return True
     except ValueError:
         pass
@@ -3058,7 +3058,6 @@ def check_arguments():
     '''
 
     global GLOBAL_VERBOSE
-    global GLOBAL_COLORS
 
     parser = ArgumentParser(description="""This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems.
             It is mainly a wrapper around the Samba tools nmblookup, net, rpcclient and smbclient. Other than the original tool it allows to export enumeration results
