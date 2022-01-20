@@ -465,7 +465,7 @@ class SambaTool():
                 # The environment will be later passed to check_output() (see run() below).
                 self.env = os.environ.copy()
                 self.env['KRB5CCNAME'] = self.creds.ticket_file
-                # User is taken from the ticket
+                # User and workgroup/domain are taken from the ticket
                 self.exec += ['-k']
             else:
                 self.exec += ['-W', f'{target.workgroup}']
@@ -2400,10 +2400,7 @@ class EnumPolicy():
             smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
             if self.creds.ticket_file:
                 os.environ['KRB5CCNAME'] = self.creds.ticket_file
-                # FIXME: This could cause trouble - not sure if it is good:
-                # It turns out that the Samba tools can handle an invalid user (it seems they just use the user from the ticket).
-                # impacket will enforce the given user, which might then lead to an error, if it does not match the ticket one.
-                # Therefore, we let impacket extract the user from the ticket. The same approach is used for the domain.
+                # Currently we let impacket extract user and domain from the ticket
                 smb_conn.kerberosLogin('', self.creds.pw, domain='', useCache=True)
             else:
                 smb_conn.login(self.creds.user, self.creds.pw, self.target.workgroup)
