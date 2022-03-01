@@ -254,6 +254,7 @@ NT_STATUS_COMMON_ERRORS = [
 
 # Supported authentication methods
 AUTH_PASSWORD = "password"
+AUTH_NTHASH = "nthash"
 AUTH_KERBEROS = "kerberos"
 AUTH_NULL = "null"
 
@@ -419,18 +420,26 @@ class Credentials:
     '''
     Stores usernames and password.
     '''
-    def __init__(self, user='', pw='', ticket_file=''):
+    def __init__(self, user='', pw='', ticket_file='', nthash=''):
         # Create an alternative user with pseudo-random username
         self.random_user = ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(8))
         self.user = user
         self.pw = pw
         self.ticket_file = ticket_file
+        self.nthash = nthash
 
         if ticket_file:
             result = self.valid_ticket(ticket_file)
             if not result.retval:
                 raise Exception(result.retmsg)
             self.auth_method = AUTH_KERBEROS
+        elif nthash:
+            result = self.valid_nthash(nthash)
+            if not result.retval:
+                raise Exception(result.retmsg)
+            if nthash and not user:
+                raise Exception("NTHash given (-H) without any user, please provide a username (-u)")
+            self.auth_method = AUTH_NTHASH
         elif not user and not pw:
             self.auth_method = AUTH_NULL
         else:
@@ -438,11 +447,19 @@ class Credentials:
                 raise Exception("Password given (-p) without any user, please provide a username (-u)")
             self.auth_method = AUTH_PASSWORD
 
+    def valid_nthash(self, nthash):
+        hash_len = len(nthash)
+        if hash_len != 32:
+            return Result(False, f'The given hash has {hash_len} characters instead of 32 characters')
+        if not re.match(r"^[a-fA-F0-9]{32}$", nthash):
+            return Result(False, f'The given hash contains invalid characters')
+        return Result(True, '')
+
     def valid_ticket(self, ticket_file):
         return valid_file(ticket_file)
 
     def as_dict(self):
-        return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'ticket_file':self.ticket_file, 'random_user':self.random_user})}
+        return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'ticket_file':self.ticket_file, 'nthash':self.nthash, 'random_user':self.random_user})}
 
 
 class SambaTool():
@@ -467,6 +484,9 @@ class SambaTool():
                 self.env['KRB5CCNAME'] = self.creds.ticket_file
                 # User and workgroup/domain are taken from the ticket
                 self.exec += ['-k']
+            elif creds.nthash:
+                self.exec += ['-W', f'{target.workgroup}']
+                self.exec += ['-U', f'{self.creds.user}%{self.creds.nthash}', '--pw-nt-hash']
             else:
                 self.exec += ['-W', f'{target.workgroup}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.pw}']
@@ -961,6 +981,7 @@ class EnumSessions():
     SESSION_RANDOM = "random user"
     SESSION_NULL = "null"
     SESSION_KERBEROS="Kerberos"
+    SESSION_NTHASH="NTHash"
 
     def __init__(self, target, creds):
 
@@ -978,6 +999,7 @@ class EnumSessions():
                   AUTH_NULL:False,
                   AUTH_PASSWORD:False,
                   AUTH_KERBEROS:False,
+                  AUTH_NTHASH:False,
                   "random_user":False,
                   }
 
@@ -999,6 +1021,15 @@ class EnumSessions():
                 print_success(kerberos_session.retmsg)
             else:
                 output = process_error(kerberos_session.retmsg, ["sessions"], module_name, output)
+        # Check NTHash session
+        elif self.creds.nthash:
+            print_info("Check for NTHash session")
+            nthash_session = self.check_session(self.creds, self.SESSION_NTHASH)
+            if nthash_session.retval:
+                sessions[AUTH_NTHASH] = True
+                print_success(nthash_session.retmsg)
+            else:
+                output = process_error(nthash_session.retmsg, ["sessions"], module_name, output)
         # Check for user session
         elif self.creds.user:
             print_info("Check for user session")
@@ -1022,6 +1053,7 @@ class EnumSessions():
         if sessions[AUTH_NULL] or \
             sessions[AUTH_PASSWORD] or \
             sessions[AUTH_KERBEROS] or \
+            sessions[AUTH_NTHASH] or \
             sessions["random_user"]:
             sessions["sessions_possible"] = True
         else:
@@ -1058,6 +1090,8 @@ class EnumSessions():
         if "case_sensitive" in result.retmsg:
             if session_type == self.SESSION_KERBEROS:
                 return Result(True, f"Server allows Kerberos session using '{creds.ticket_file}'")
+            if session_type == self.SESSION_NTHASH:
+                return Result(True, f"Server allows NTHash session using '{creds.nthash}'")
             return Result(True, f"Server allows session using username '{creds.user}', password '{creds.pw}'")
         return Result(False, f"Could not establish session using '{creds.user}', password '{creds.pw}'")
 
@@ -2610,7 +2644,7 @@ class Enumerator():
 
         # Init target and creds
         try:
-            self.creds = Credentials(args.user, args.pw, args.ticket_file)
+            self.creds = Credentials(args.user, args.pw, args.ticket_file, args.nthash)
             self.target = Target(args.host, args.workgroup, self.creds.auth_method, timeout=args.timeout)
         except Exception as e:
             raise RuntimeError(str(e))
@@ -3087,6 +3121,7 @@ def check_arguments():
     auth_methods = parser.add_mutually_exclusive_group()
     auth_methods.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
     auth_methods.add_argument("-K", dest="ticket_file", default='', type=str, help="Try to authenticate with Kerberos, only useful in Active Directory environment")
+    auth_methods.add_argument("-H", dest="nthash", default='', type=str, help="Try to authenticate with hash")
     parser.add_argument("-d", action="store_true", help="Get detailed information for users and groups, applies to -U, -G and -R")
     parser.add_argument("-k", dest="users", default=KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {KNOWN_USERNAMES}).\nUsed to get sid with "lookupsids"')
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
