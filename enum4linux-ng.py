@@ -1679,7 +1679,7 @@ class EnumUsersRpc():
                         output = process_error(user_details.retmsg, ["users"], module_name, output)
                         users[rid]["details"] = ""
 
-            print_success(f"After merging user results we have {len(users.keys())} users total:\n{yamlize(users, sort=True)}")
+            print_success(f"After merging user results we have {len(users.keys())} user(s) total:\n{yamlize(users, sort=True)}")
 
         output["users"] = users
         return output
@@ -1737,7 +1737,7 @@ class EnumUsersRpc():
                 users[rid] = OrderedDict({"username":username, "name":name, "acb":acb, "description":description})
             else:
                 return Result(None, "Could not extract users from querydispinfo output, please open a GitHub issue")
-        return Result(users, f"Found {len(users.keys())} users via 'querydispinfo'")
+        return Result(users, f"Found {len(users.keys())} user(s) via 'querydispinfo'")
 
     def enum_from_enumdomusers(self):
         '''
@@ -1760,7 +1760,7 @@ class EnumUsersRpc():
                 users[rid] = {"username":username}
             else:
                 return Result(None, "Could not extract users from eumdomusers output, please open a GitHub issue")
-        return Result(users, f"Found {len(users.keys())} users via 'enumdomusers'")
+        return Result(users, f"Found {len(users.keys())} user(s) via 'enumdomusers'")
 
     def get_details_from_rid(self, rid, name):
         '''
@@ -1864,7 +1864,7 @@ class EnumGroupsRpc():
                         output = process_error(details.retmsg, ["groups"], module_name, output)
                     groups[rid]["details"] = details.retval
 
-            print_success(f"After merging groups results we have {len(groups.keys())} groups total:\n{yamlize(groups, sort=True)}")
+            print_success(f"After merging groups results we have {len(groups.keys())} group(s) total:\n{yamlize(groups, sort=True)}")
         output["groups"] = groups
         return output
 
@@ -1906,7 +1906,7 @@ class EnumGroupsRpc():
                 groups[rid] = OrderedDict({"groupname":groupname, "type":grouptype})
             else:
                 return Result(None, f"Could not extract groups from '{' '.join(grouptype_dict[grouptype])}' output, please open a GitHub issue")
-        return Result(groups, f"Found {len(groups.keys())} groups via '{' '.join(grouptype_dict[grouptype])}'")
+        return Result(groups, f"Found {len(groups.keys())} group(s) via '{' '.join(grouptype_dict[grouptype])}'")
 
     def enum_by_grouptype(self, grouptype):
         '''
