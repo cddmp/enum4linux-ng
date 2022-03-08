@@ -420,13 +420,14 @@ class Credentials:
     '''
     Stores usernames and password.
     '''
-    def __init__(self, user='', pw='', ticket_file='', nthash=''):
+    def __init__(self, user='', pw='', ticket_file='', nthash='', local_auth=False):
         # Create an alternative user with pseudo-random username
         self.random_user = ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(8))
         self.user = user
         self.pw = pw
         self.ticket_file = ticket_file
         self.nthash = nthash
+        self.local_auth = local_auth
 
         if ticket_file:
             result = self.valid_ticket(ticket_file)
@@ -485,10 +486,12 @@ class SambaTool():
                 # User and workgroup/domain are taken from the ticket
                 self.exec += ['-k']
             elif creds.nthash:
-                self.exec += ['-W', f'{target.workgroup}']
+                if not self.creds.local_auth:
+                    self.exec += ['-W', f'{target.workgroup}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.nthash}', '--pw-nt-hash']
             else:
-                self.exec += ['-W', f'{target.workgroup}']
+                if not self.creds.local_auth:
+                    self.exec += ['-W', f'{target.workgroup}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.pw}']
 
         # If the target has a custom Samba configuration attached, we will add it to the
@@ -2646,7 +2649,7 @@ class Enumerator():
 
         # Init target and creds
         try:
-            self.creds = Credentials(args.user, args.pw, args.ticket_file, args.nthash)
+            self.creds = Credentials(args.user, args.pw, args.ticket_file, args.nthash, args.local_auth)
             self.target = Target(args.host, args.workgroup, self.creds.auth_method, timeout=args.timeout)
         except Exception as e:
             raise RuntimeError(str(e))
@@ -3124,6 +3127,7 @@ def check_arguments():
     auth_methods.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
     auth_methods.add_argument("-K", dest="ticket_file", default='', type=str, help="Try to authenticate with Kerberos, only useful in Active Directory environment")
     auth_methods.add_argument("-H", dest="nthash", default='', type=str, help="Try to authenticate with hash")
+    parser.add_argument("--local-auth", action="store_true", default=False, help="Authenticate locally to target")
     parser.add_argument("-d", action="store_true", help="Get detailed information for users and groups, applies to -U, -G and -R")
     parser.add_argument("-k", dest="users", default=KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {KNOWN_USERNAMES}).\nUsed to get sid with "lookupsids"')
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
