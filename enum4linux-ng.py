@@ -487,12 +487,10 @@ class SambaTool():
                 # User and workgroup/domain are taken from the ticket
                 self.exec += ['-k']
             elif creds.nthash:
-                if not self.creds.local_auth:
-                    self.exec += ['-W', f'{target.workgroup}']
+                self.exec += ['-W', f'{target.workgroup}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.nthash}', '--pw-nt-hash']
             else:
-                if not self.creds.local_auth:
-                    self.exec += ['-W', f'{target.workgroup}']
+                self.exec += ['-W', f'{target.workgroup}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.pw}']
 
         # If the target has a custom Samba configuration attached, we will add it to the
@@ -2763,14 +2761,14 @@ class Enumerator():
         if ENUM_LDAP_DOMAIN_INFO in modules:
             result = EnumLdapDomainInfo(self.target).run()
             self.output.update(result)
-            if not self.target.workgroup and result["long_domain"]:
+            if not self.creds.local_auth and not self.target.workgroup and result["long_domain"]:
                 self.target.update_workgroup(result["long_domain"], True)
 
         # Try to retrieve workstation and nbtstat information
         if ENUM_NETBIOS in modules:
             result = EnumNetbios(self.target).run()
             self.output.update(result)
-            if not self.target.workgroup and result["workgroup"]:
+            if not self.creds.local_auth and not self.target.workgroup and result["workgroup"]:
                 self.target.update_workgroup(result["workgroup"])
 
         # Enumerate supported SMB versions
@@ -2781,6 +2779,10 @@ class Enumerator():
         # Try to get domain name and sid via lsaquery
         if ENUM_SMB_DOMAIN_INFO in modules:
             result = EnumSmbDomainInfo(self.target, self.creds).run()
+            # If the user requested local-auth we take the NetBIOS computer name as workgroup.
+            # This will enforce usage of the local rather than the domain SAM. See smbclient man page.
+            if self.creds.local_auth:
+                self.target.update_workgroup(result["domain_info"]["NetBIOS computer name"])
             self.output.update(result)
 
         # Check for various session types including null sessions
@@ -2798,7 +2800,7 @@ class Enumerator():
         if ENUM_LSAQUERY_DOMAIN_INFO in modules:
             result = EnumLsaqueryDomainInfo(self.target, self.creds).run()
             self.output.update(result)
-            if not self.target.workgroup and result["workgroup"]:
+            if not self.creds.local_auth and not self.target.workgroup and result["workgroup"]:
                 self.target.update_workgroup(result["workgroup"])
 
         # Get OS information like os version, server type string...
@@ -3161,7 +3163,8 @@ def check_arguments():
     GLOBAL_VERBOSE = args.verbose
 
     # Check Workgroup
-    if args.workgroup:
+    # Do not set the workgroup for local auth
+    if not args.local_auth and args.workgroup:
         if not valid_workgroup(args.workgroup):
             raise RuntimeError(f"Workgroup '{args.workgroup}' contains illegal character")
 
