@@ -512,8 +512,8 @@ class SambaTool():
         # tools often throw misleading error codes like NT_STATUS_CONNECTION_DISCONNECTED. Often this 
         # error is associated with SMB dialect incompatibilities between client and server. But this 
         # error also occurs on other occasions. In order to find out the real reason we need to fetch
-        # earlier errors which this debugging level will provide. Please keep enabled.
-        self.exec += ['-d1']
+        # earlier errors which this debugging level will provide.
+        #self.exec += ['-d1']
 
     def run(self, log, error_filter=True):
         '''
