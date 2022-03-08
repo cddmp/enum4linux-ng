@@ -250,7 +250,8 @@ NT_STATUS_COMMON_ERRORS = [
         "WERR_ACCESS_DENIED",
         # This error code is from the depths of CIFS/SMBv1
         # https://tools.ietf.org/id/draft-leach-cifs-v1-spec-01.txt
-        "ERRSRV:ERRaccess"
+        "ERRSRV:ERRaccess",
+        "RPC_S_ACCESS_DENIED"
     ]
 
 # Supported authentication methods
@@ -3062,7 +3063,7 @@ def process_impacket_smb_exception(exception, target):
 
 def nt_status_error_filter(msg):
     for error in NT_STATUS_COMMON_ERRORS:
-        if error in msg:
+        if error.lower() in msg.lower():
             return error
     return ""
 
