@@ -233,25 +233,33 @@ SMB_DIALECTS = {
 # called after running a Samba client command (see run()). The idea is to filter out
 # common errors. For very specific status errors, please don't handle them here but
 # in the corresponding enumeration class/function.
+# In the current implementation this list is case insensitive. Also the order of errors
+# is important. Errors on top will be processed first. The access denied errors should
+# be kept on top since they occur typically first (see also comment on
+# STATUS_CONNECTION_DISCONNECTED).
 NT_STATUS_COMMON_ERRORS = [
+        "RPC_S_ACCESS_DENIED",
+        "DCERPC_FAULT_ACCESS_DENIED",
+        "WERR_ACCESS_DENIED",
+        "STATUS_ACCESS_DENIED",
         "STATUS_ACCOUNT_LOCKED_OUT",
         "STATUS_NO_LOGON_SERVERS",
-        "STATUS_ACCESS_DENIED",
         "STATUS_LOGON_FAILURE",
         "STATUS_IO_TIMEOUT",
         "STATUS_NETWORK_UNREACHABLE",
         "STATUS_INVALID_PARAMETER",
         "STATUS_NOT_SUPPORTED",
         "STATUS_NO_SUCH_FILE",
-        # This is a rather strange status which needs more examination and might be
-        # removed from here in the future.
-        "STATUS_CONNECTION_DISCONNECTED",
         "STATUS_PASSWORD_EXPIRED",
-        "WERR_ACCESS_DENIED",
         # This error code is from the depths of CIFS/SMBv1
         # https://tools.ietf.org/id/draft-leach-cifs-v1-spec-01.txt
         "ERRSRV:ERRaccess",
-        "RPC_S_ACCESS_DENIED"
+        # This error is misleading. It can occur when the an SMB client cannot negotiate
+        # a connection with the SMB server e.g., because of both not supporting each others
+        # SMB dialect. But this error can also occur if during an RPC call access was denied
+        # to a specific ressource/function call. In this case the oppositve site often disconnects
+        # and the Samba client tools will show this error.
+        "STATUS_CONNECTION_DISCONNECTED"
     ]
 
 # Supported authentication methods
@@ -499,6 +507,13 @@ class SambaTool():
         # run (e.g. enforce legacy SMBv1).
         if target.samba_config:
             self.exec += ['-s', f'{target.samba_config.get_path()}']
+
+        # This enables debugging output (level 1) for the Samba client tools. The problem is that the
+        # tools often throw misleading error codes like NT_STATUS_CONNECTION_DISCONNECTED. Often this 
+        # error is associated with SMB dialect incompatibilities between client and server. But this 
+        # error also occurs on other occasions. In order to find out the real reason we need to fetch
+        # earlier errors which this debugging level will provide. Please keep enabled.
+        self.exec += ['-d1']
 
     def run(self, log, error_filter=True):
         '''
