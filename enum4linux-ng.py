@@ -440,7 +440,7 @@ class Credentials:
             if not result.retval:
                 raise Exception(result.retmsg)
             if nthash and not user:
-                raise Exception("NTHash given (-H) without any user, please provide a username (-u)")
+                raise Exception("NT hash given (-H) without any user, please provide a username (-u)")
             self.auth_method = AUTH_NTHASH
         elif not user and not pw:
             self.auth_method = AUTH_NULL
@@ -985,7 +985,7 @@ class EnumSessions():
     SESSION_RANDOM = "random user"
     SESSION_NULL = "null"
     SESSION_KERBEROS="Kerberos"
-    SESSION_NTHASH="NTHash"
+    SESSION_NTHASH="NT hash"
 
     def __init__(self, target, creds):
 
@@ -1025,9 +1025,9 @@ class EnumSessions():
                 print_success(kerberos_session.retmsg)
             else:
                 output = process_error(kerberos_session.retmsg, ["sessions"], module_name, output)
-        # Check NTHash session
+        # Check NT hash session
         elif self.creds.nthash:
-            print_info("Check for NTHash session")
+            print_info("Check for NT hash session")
             nthash_session = self.check_session(self.creds, self.SESSION_NTHASH)
             if nthash_session.retval:
                 sessions[AUTH_NTHASH] = True
@@ -1095,7 +1095,7 @@ class EnumSessions():
             if session_type == self.SESSION_KERBEROS:
                 return Result(True, f"Server allows Kerberos session using '{creds.ticket_file}'")
             if session_type == self.SESSION_NTHASH:
-                return Result(True, f"Server allows NTHash session using '{creds.nthash}'")
+                return Result(True, f"Server allows NT hash session using '{creds.nthash}'")
             return Result(True, f"Server allows session using username '{creds.user}', password '{creds.pw}'")
         return Result(False, f"Could not establish session using '{creds.user}', password '{creds.pw}'")
 
