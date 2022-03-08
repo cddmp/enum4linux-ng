@@ -2432,6 +2432,8 @@ class EnumPolicy():
                 os.environ['KRB5CCNAME'] = self.creds.ticket_file
                 # Currently we let impacket extract user and domain from the ticket
                 smb_conn.kerberosLogin('', self.creds.pw, domain='', useCache=True)
+            elif self.creds.nthash:
+                smb_conn.login(self.creds.user, self.creds.pw, domain=self.target.workgroup, nthash=self.creds.nthash)
             else:
                 smb_conn.login(self.creds.user, self.creds.pw, self.target.workgroup)
 
