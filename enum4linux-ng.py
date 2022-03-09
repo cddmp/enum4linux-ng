@@ -93,7 +93,7 @@ from subprocess import check_output, STDOUT, TimeoutExpired
 import sys
 import tempfile
 from impacket import nmb, smb, smbconnection, smb3
-from impacket.smbconnection import SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30
+from impacket.smbconnection import SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30, SMB2_DIALECT_311
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
@@ -226,7 +226,8 @@ SMB_DIALECTS = {
         SMB_DIALECT: "SMB 1.0",
         SMB2_DIALECT_002: "SMB 2.02",
         SMB2_DIALECT_21: "SMB 2.1",
-        SMB2_DIALECT_30: "SMB 3.0"
+        SMB2_DIALECT_30: "SMB 3.0",
+        SMB2_DIALECT_311: "SMB 3.1.1"
     }
 
 # This list will be used by the function nt_status_error_filter() which is typically
@@ -941,12 +942,13 @@ class EnumSmb():
                 SMB_DIALECTS[SMB2_DIALECT_002]: False,
                 SMB_DIALECTS[SMB2_DIALECT_21]:False,
                 SMB_DIALECTS[SMB2_DIALECT_30]:False,
+                SMB_DIALECTS[SMB2_DIALECT_311]:False,
                 "SMB1 only": False,
                 "Preferred dialect": None,
                 "SMB signing required": None
         }
 
-        smb_dialects = [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30]
+        smb_dialects = [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30, SMB2_DIALECT_311]
 
         # First we let the target decide what dialect it likes to talk.
         current_dialect = None
@@ -961,8 +963,7 @@ class EnumSmb():
             output[SMB_DIALECTS[current_dialect]] = True
             output["Preferred dialect"] = SMB_DIALECTS[current_dialect]
         except Exception as exc:
-            # Currently the impacket library does not support SMB 3.02 and 3.11. Whenever a remote host only supports 3.02 or 3.11
-            # we should end up here. This is somewhat vague, but better when nothing.
+            # FIXME: This can propably go as impacket now supports SMB3 up to 3.11.
             if isinstance(exc, (smb3.SessionError)):
                 if nt_status_error_filter(str(exc)) == "STATUS_NOT_SUPPORTED":
                     output["Preferred Dialect"] = "> SMB 3.0"
@@ -987,7 +988,8 @@ class EnumSmb():
         if output[SMB_DIALECTS[SMB_DIALECT]] and \
                 not output[SMB_DIALECTS[SMB2_DIALECT_002]] and \
                 not output[SMB_DIALECTS[SMB2_DIALECT_21]] and \
-                not output[SMB_DIALECTS[SMB2_DIALECT_30]]:
+                not output[SMB_DIALECTS[SMB2_DIALECT_30]] and \
+                not output[SMB_DIALECTS[SMB2_DIALECT_311]]:
             output["SMB1 only"] = True
 
         return Result(output, f"Supported dialects and settings:\n{yamlize(output)}")
