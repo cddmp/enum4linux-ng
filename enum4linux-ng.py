@@ -381,7 +381,9 @@ class Target:
         self.smb_ports = []
         self.ldap_ports = []
         self.services = []
-        self.smb_dialects = []
+        self.smb_preferred_dialect = None
+        self.smb1_supported = False
+        self.smb1_only = False
 
         result = self.valid_host(host)
         if not result.retval:
@@ -893,7 +895,7 @@ class EnumSmb():
 
     def run(self):
         '''
-        Run SMB module which checks whether only SMBv1 is supported.
+        Run SMB module which checks for the supported SMB dialects.
         '''
         module_name = ENUM_SMB
         print_heading(f"SMB Dialect Check on {self.target.host}")
@@ -909,9 +911,6 @@ class EnumSmb():
                 output["smb_dialects"] = result.retval
                 print_success(result.retmsg)
                 break
-
-        if result.retval:
-            self.target.smb_dialects = output["smb_dialects"]
 
         # Does the target only support SMBv1? Then enforce it!
         if result.retval and result.retval["SMB1 only"]:
@@ -937,61 +936,62 @@ class EnumSmb():
         negatives during session checks, if the target only supports SMBv1. Therefore, we try to find out here whether
         the target system only speaks SMBv1.
         '''
-        output = {
+        supported = {
                 SMB_DIALECTS[SMB_DIALECT]: False,
                 SMB_DIALECTS[SMB2_DIALECT_002]: False,
                 SMB_DIALECTS[SMB2_DIALECT_21]:False,
                 SMB_DIALECTS[SMB2_DIALECT_30]:False,
                 SMB_DIALECTS[SMB2_DIALECT_311]:False,
-                "SMB1 only": False,
+                }
+
+        output = {
+                "Supported dialects": None,
                 "Preferred dialect": None,
+                "SMB1 only": False,
                 "SMB signing required": None
         }
 
+        # List dialects supported by impacket
         smb_dialects = [SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_21, SMB2_DIALECT_30, SMB2_DIALECT_311]
 
-        # First we let the target decide what dialect it likes to talk.
-        current_dialect = None
+        # Check all dialects
+        last_supported_dialect = None
+        for dialect in smb_dialects:
+            try:
+                smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=dialect)
+                smb_conn.close()
+                supported[SMB_DIALECTS[dialect]] = True
+                last_supported_dialect = dialect
+            except Exception:
+                pass
+
+        # Set whether we suppot SMB1 or not for this class
+        self.target.smb1_supported = supported[SMB_DIALECTS[SMB_DIALECT]]
+
+        # Does the target only support one dialect? Then this must be also the preferred dialect.
+        preferred_dialect = None
+        if sum(1 for value in supported.values() if value == True) == 1:
+            if last_supported_dialect == SMB_DIALECT:
+                output["SMB1 only"] = True
+                self.target.smb1_only = True
+            preferred_dialect = last_supported_dialect
+
         try:
-            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            current_dialect = smb_conn.getDialect()
+            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=preferred_dialect)
+            preferred_dialect = smb_conn.getDialect()
             # Check whether SMB signing is required or optional - since this seems to be a global setting, we check it only for the preferred dialect
             output["SMB signing required"] = smb_conn.isSigningRequired()
             smb_conn.close()
 
-            # We found one supported dialect, this is also the dialect the remote host selected/preferred of the offered ones
-            output[SMB_DIALECTS[current_dialect]] = True
-            output["Preferred dialect"] = SMB_DIALECTS[current_dialect]
+            output["Preferred dialect"] = SMB_DIALECTS[preferred_dialect]
+            self.target.smb_preferred_dialect = preferred_dialect
         except Exception as exc:
             # FIXME: This can propably go as impacket now supports SMB3 up to 3.11.
             if isinstance(exc, (smb3.SessionError)):
                 if nt_status_error_filter(str(exc)) == "STATUS_NOT_SUPPORTED":
                     output["Preferred Dialect"] = "> SMB 3.0"
 
-        # Did the session setup above work? If so, we found a supported SMB dialect and we can remove it from the list,
-        # so that we do not run the check twice.
-        if current_dialect is not None:
-            smb_dialects.remove(current_dialect)
-        current_dialect = None
-
-        # Check all remaining dialects (which impacket supports)
-        for preferred_dialect in smb_dialects:
-            try:
-                smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=preferred_dialect)
-                current_dialect = smb_conn.getDialect()
-                smb_conn.close()
-                if current_dialect == preferred_dialect:
-                    output[SMB_DIALECTS[current_dialect]] = True
-            except Exception:
-                pass
-
-        if output[SMB_DIALECTS[SMB_DIALECT]] and \
-                not output[SMB_DIALECTS[SMB2_DIALECT_002]] and \
-                not output[SMB_DIALECTS[SMB2_DIALECT_21]] and \
-                not output[SMB_DIALECTS[SMB2_DIALECT_30]] and \
-                not output[SMB_DIALECTS[SMB2_DIALECT_311]]:
-            output["SMB1 only"] = True
-
+        output["Supported dialects"] = supported
         return Result(output, f"Supported dialects and settings:\n{yamlize(output)}")
 
 ### Session Checks
@@ -1268,7 +1268,7 @@ class EnumSmbDomainInfo():
 
         smb_conn = None
         try:
-            smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+            smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=self.target.smb_preferred_dialect)
             smb_conn.login("", "", "")
         except Exception as e:
             error_msg = process_impacket_smb_exception(e, self.target)
@@ -1513,15 +1513,12 @@ class EnumOsInfo():
         os_major = None
         os_minor = None
 
-        smb1_supported = self.target.smb_dialects[SMB_DIALECTS[SMB_DIALECT]]
-        smb1_only = self.target.smb_dialects["SMB1 only"]
-
         # For SMBv1 we can typically find the "Native OS" (e.g. "Windows 5.1")  and "Native LAN Manager"
         # (e.g. "Windows 2000 LAN Manager") field in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find the "OS Major" (e.g. 5), "OS Minor" (e.g. 1) as well as the
         # "OS Build" fields in the "SMB2 Session Setup Response packet".
 
-        if smb1_supported:
+        if self.target.smb1_supported:
             smb_conn = None
             try:
                 smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=SMB_DIALECT)
@@ -1531,7 +1528,7 @@ class EnumOsInfo():
                 if not "STATUS_ACCESS_DENIED" in error_msg:
                     return Result(None, error_msg)
 
-            if smb1_only:
+            if self.target.smb1_only:
                 os_info["OS build"] = "not supported"
                 os_info["OS release"] = "not supported"
 
@@ -1553,17 +1550,17 @@ class EnumOsInfo():
             except:
                 pass
 
-        if not smb1_only:
+        if not self.target.smb1_only:
             smb_conn = None
             try:
-                smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
+                smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=self.target.smb_preferred_dialect)
                 smb_conn.login("", "", "")
             except Exception as e:
                 error_msg = process_impacket_smb_exception(e, self.target)
                 if not "STATUS_ACCESS_DENIED" in error_msg:
                     return Result(None, error_msg)
 
-            if not smb1_supported:
+            if not self.target.smb1_supported:
                 os_info["Native LAN manager"] = "not supported"
                 os_info["Native OS"] = "not supported"
 
