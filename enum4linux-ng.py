@@ -2796,10 +2796,6 @@ class Enumerator():
             result = EnumSmbDomainInfo(self.target, self.creds).run()
             # If the user requested local-auth we take the NetBIOS computer name as workgroup.
             # This will enforce usage of the local rather than the domain SAM. See smbclient man page.
-            # For SMB 3.11 this will fail since it is not supported by impacket for now and we therefore
-            # cannot get the NetBIOS computer name. In this case domain_info will be None and we leave the
-            # workgroup untouched.
-            # FIXME
             if self.creds.local_auth and result["domain_info"]:
                 self.target.update_workgroup(result["domain_info"]["NetBIOS computer name"])
             self.output.update(result)
