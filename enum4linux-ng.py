@@ -3202,6 +3202,18 @@ def check_arguments():
         raise RuntimeError("Timeout must be a valid integer in the range 1-600")
     args.timeout = int(args.timeout)
 
+    # While smbclient and rpcclient support '--pw-nt-hash' the net command does not before Samba 4.15.
+    # In Samba 4.15 the commandline parser of the various tools were unified so that '--pw-nt-hash' works
+    # for this and later versions. An option would be to run the tool in a docker container like a recent
+    # Alpine Linux version.
+    if args.nthash and (args.Gm or args.d):
+        try:
+            output = check_output(['net','help'], shell=False, stderr=STDOUT)
+        except Exception as e:
+            output = str(e.output)
+        if '--pw-nt-hash' not in output:
+            raise RuntimeError("The -d and -Gm argument require Samba 4.15 or higher when used in combination with -H")
+
     return args
 
 ### Dependency Checks
