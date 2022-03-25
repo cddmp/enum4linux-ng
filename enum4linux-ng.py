@@ -3206,13 +3206,13 @@ def check_arguments():
     # In Samba 4.15 the commandline parser of the various tools were unified so that '--pw-nt-hash' works
     # for this and later versions. An option would be to run the tool in a docker container like a recent
     # Alpine Linux version.
-    if args.nthash and (args.Gm or args.d):
+    if args.nthash and (args.Gm or args.C):
         try:
             output = check_output(['net','help'], shell=False, stderr=STDOUT)
         except Exception as e:
             output = str(e.output)
         if '--pw-nt-hash' not in output:
-            raise RuntimeError("The -d and -Gm argument require Samba 4.15 or higher when used in combination with -H")
+            raise RuntimeError("The -C and -Gm argument require Samba 4.15 or higher when used in combination with -H")
 
     return args
 
