@@ -846,7 +846,9 @@ class EnumSessions():
             pw = creds.pw
             session_type = "user"
 
-        command = ['smbclient', '-t', f"{self.target.timeout}", '-W', self.target.workgroup, f'//{self.target.host}/ipc$', '-U', f'{user}%{pw}', '-c', 'help']
+        command = ['smbclient', '-t', f"{self.target.timeout}", f'//{self.target.host}/ipc$', '-c', 'help']
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
         result = run(command, "Attempting to make session", self.target.samba_config)
 
         if not result.retval:
@@ -1087,7 +1089,10 @@ class EnumLsaqueryDomainInfo():
         command. This command will do an LSA_QueryInfoPolicy request to get the domain name and the domain service identifier
         (SID).
         '''
-        command = ['rpcclient', '-W', self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', self.target.host, '-c', 'lsaquery']
+        command = ['rpcclient']
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend([self.target.host, '-c', 'lsaquery'])
         result = run(command, "Attempting to get domain SID", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
@@ -1197,7 +1202,10 @@ class EnumOsInfo():
         server type).
         '''
 
-        command = ["rpcclient", "-W", self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', '-c', 'srvinfo', self.target.host]
+        command = ["rpcclient"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(['-c', 'srvinfo', self.target.host])
         result = run(command, "Attempting to get OS info with command", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
@@ -1434,7 +1442,10 @@ class EnumUsersRpc():
         This request will return users with their corresponding Relative ID (RID) as well as multiple account information like a
         description of the account.
         '''
-        command = ['rpcclient', '-W', self.target.workgroup, '-U', f'{self.creds.user}%{self.creds.pw}', '-c', 'querydispinfo', self.target.host]
+        command = ['rpcclient']
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(['-c', 'querydispinfo', self.target.host])
         result = run(command, "Attempting to get userlist", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
@@ -1449,7 +1460,10 @@ class EnumUsersRpc():
         the registry key HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Lsa\\RestrictAnonymous = 0. If this is set to
         1 enumeration is no longer possible.
         '''
-        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "enumdomusers", self.target.host]
+        command = ["rpcclient"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(["-c", "enumdomusers", self.target.host])
         result = run(command, "Attempting to get userlist", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
@@ -1515,7 +1529,10 @@ class EnumUsersRpc():
             return Result(None, f"Invalid rid passed: {rid}")
 
         details = OrderedDict()
-        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"queryuser {rid}", self.target.host]
+        command = ["rpcclient"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(["-c", f"queryuser {rid}", self.target.host])
         result = run(command, "Attempting to get detailed user info", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
@@ -1666,7 +1683,10 @@ class EnumGroupsRpc():
         if grouptype not in ["builtin", "domain", "local"]:
             return Result(None, f"Unsupported grouptype, supported types are: { ','.join(grouptype_dict.keys()) }")
 
-        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"{grouptype_dict[grouptype]}", self.target.host]
+        command = ["rpcclient"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(["-c", f"{grouptype_dict[grouptype]}", self.target.host])
         result = run(command, f"Attempting to get {grouptype} groups", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
@@ -1679,7 +1699,9 @@ class EnumGroupsRpc():
         Takes a group name as first argument and tries to enumerate the group members. This is don by using
         the 'net rpc group members' command.
         '''
-        command = ["net", "rpc", "group", "members", groupname, "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-I", self.target.host, "-U", f"{self.creds.user}%{self.creds.pw}"]
+        command = ["net", "rpc", "group", "members", groupname, "-t", f"{self.target.timeout}", "-I", self.target.host]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
         result = run(command, f"Attempting to get group memberships for {grouptype} group '{groupname}'", self.target.samba_config)
 
         if not result.retval:
@@ -1704,7 +1726,10 @@ class EnumGroupsRpc():
             return Result(None, f"Invalid rid passed: {rid}")
 
         details = OrderedDict()
-        command = ["rpcclient", "-W", self.target.workgroup, "-U", f'{self.creds.user}%{self.creds.pw}', "-c", f"querygroup {rid}", self.target.host]
+        command = ["rpcclient"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(["-c", f"querygroup {rid}", self.target.host])
         result = run(command, "Attempting to get detailed group info", self.target.samba_config, timeout=self.target.timeout)
 
         if not result.retval:
@@ -1851,7 +1876,10 @@ class RidCycling():
 
         # Try to get a valid SID from well-known user names
         for known_username in users.split(','):
-            command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", f"lookupnames {known_username}", self.target.host]
+            command = ["rpcclient"]
+            command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+            command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+            command.extend(["-c", f"lookupnames {known_username}", self.target.host])
             result = run(command, f"Attempting to get SID for user {known_username}", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
             sid_string = result.retmsg
 
@@ -1868,7 +1896,10 @@ class RidCycling():
 
         #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
         # Try to get SID list via lsaenumsid
-        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "lsaenumsid", self.target.host]
+        command = ["rpcclient"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(["-c", "lsaenumsid", self.target.host])
         result = run(command, "Attempting to get SIDs via 'lsaenumsid'", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
 
         if "NT_STATUS_ACCESS_DENIED" not in result.retmsg:
@@ -1891,7 +1922,10 @@ class RidCycling():
 
             #FIXME: Use nt_status_error_filter - then remove the error_filter=False part above
             for rid in range(start_rid, end_rid+1):
-                command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", self.target.host, "-c", f"lookupsids {sid}-{rid}"]
+                command = ["rpcclient"]
+                command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+                command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+                command.extend([self.target.host, "-c", f"lookupsids {sid}-{rid}"])
                 result = run(command, "RID Cycling", self.target.samba_config, error_filter=False, timeout=self.target.timeout)
 
                 # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
@@ -1963,7 +1997,10 @@ class EnumShares():
         smbclient will open a connection to the Server Service Remote Protocol named pipe (srvsvc). Once connected
         it calls the NetShareEnumAll() to get a list of shares.
         '''
-        command = ["smbclient", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-L", f"//{self.target.host}", "-g"]
+        command = ["smbclient", "-t", f"{self.target.timeout}"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(["-L", f"//{self.target.host}", "-g"])
         result = run(command, "Attempting to get share list using authentication", self.target.samba_config)
 
         if not result.retval:
@@ -1995,7 +2032,10 @@ class EnumShares():
         In order to enumerate access permissions, smbclient is used with the "dir" command.
         In the background this will send an SMB I/O Control (IOCTL) request in order to list the contents of the share.
         '''
-        command = ["smbclient", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", f"//{self.target.host}/{share}", "-c", "dir"]
+        command = ["smbclient", "-t", f"{self.target.timeout}"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend([f"//{self.target.host}/{share}", "-c", "dir"])
         result = run(command, f"Attempting to map share //{self.target.host}/{share}", self.target.samba_config, error_filter=False)
 
         if "NT_STATUS_BAD_NETWORK_NAME" in result.retmsg:
@@ -2301,7 +2341,10 @@ class EnumPrinters():
         '''
         Tries to enum printer via rpcclient's enumprinters.
         '''
-        command = ["rpcclient", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-c", "enumprinters", self.target.host]
+        command = ["rpcclient"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.extend(["-c", "enumprinters", self.target.host])
         result = run(command, "Attempting to get printer info", self.target.samba_config, timeout=self.target.timeout)
         printers = {}
 
@@ -2359,7 +2402,10 @@ class EnumServices():
         '''
         Tries to enum services via net rpc serivce list.
         '''
-        command = ["net", "rpc", "service", "list", "-t", f"{self.target.timeout}", "-W", self.target.workgroup, "-U", f"{self.creds.user}%{self.creds.pw}", "-I", self.target.host]
+        command = ["net", "rpc", "service", "list", "-t", f"{self.target.timeout}"]
+        command.extend(['-W', self.target.workgroup]) if len(self.target.workgroup) > 0 else None
+        command.extend(['-U', f'{self.creds.user}%{self.creds.pw}']) if len(self.creds.user) > 0 and len(self.creds.pw) > 0 else command.extend(['-U', f'{self.creds.user}', '-N'])
+        command.append(["-I", self.target.host])
         result = run(command, "Attempting to get services", self.target.samba_config)
         services = {}
 
