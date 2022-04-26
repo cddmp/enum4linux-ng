@@ -364,19 +364,15 @@ class Target:
     passed during the enumeration to the various modules. This allows to modify/update target information
     during enumeration.
     '''
-    def __init__(self, host, workgroup, auth_method=None, port=None, timeout=None, tls=None, samba_config=None, sessions={}):
+    def __init__(self, host, credentials, port=None, tls=None, timeout=None, samba_config=None, sessions={}):
         self.host = host
+        self.creds = credentials
         self.port = port
-        self.workgroup = workgroup
         self.timeout = timeout
         self.tls = tls
         self.samba_config = samba_config
-        self.auth_method = auth_method
         self.sessions = sessions
 
-        self.workgroup_from_long_domain = False
-        # FIXME: The long_domain might be useful for Kerberos, but we do not use it a the moment
-        self.long_domain = ''
         self.ip_version = None
         self.smb_ports = []
         self.ldap_ports = []
@@ -388,21 +384,6 @@ class Target:
         result = self.valid_host(host)
         if not result.retval:
             raise Exception(result.retmsg)
-
-    def update_workgroup(self, workgroup, long_domain=False):
-        # Occassionally lsaquery would return a slightly different domain name than LDAP, e.g.
-        # MYDOMAIN vs. MY-DOMAIN. It is unclear what the impact of using one or the other is for
-        # subsequent enumeration steps.
-        # For now we prefer the domain name from LDAP ("long domain") over the domain/workgroup
-        # discovered by lsaquery or others.
-        if self.workgroup_from_long_domain:
-            return
-        if long_domain:
-            self.long_domain = workgroup
-            self.workgroup = workgroup.split('.')[0]
-            self.workgroup_from_long_domain = True
-        else:
-            self.workgroup = workgroup
 
     def valid_host(self, host):
         try:
@@ -417,7 +398,7 @@ class Target:
 
             # Kerberos requires resolvable hostnames rather than IP adresses
             ip = result[0][4][0]
-            if ip == host and self.auth_method == AUTH_KERBEROS:
+            if ip == host and self.creds.auth_method == AUTH_KERBEROS:
                 return Result(False, f'Kerberos authentication requires a hostname, but an IPv{self.ip_version} address was given')
 
             return Result(True,'')
@@ -427,20 +408,22 @@ class Target:
         return Result(False, 'No valid host given')
 
     def as_dict(self):
-        return {'target':{'host':self.host, 'workgroup':self.workgroup}}
+        return {'target':{'host':self.host}}
 
 class Credentials:
     '''
     Stores usernames and password.
     '''
-    def __init__(self, user='', pw='', ticket_file='', nthash='', local_auth=False):
+    def __init__(self, user='', pw='', domain='', ticket_file='', nthash='', local_auth=False):
         # Create an alternative user with pseudo-random username
         self.random_user = ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(8))
         self.user = user
         self.pw = pw
+        self.domain = domain
         self.ticket_file = ticket_file
         self.nthash = nthash
         self.local_auth = local_auth
+        self.domain_set = False
 
         if ticket_file:
             result = self.valid_ticket(ticket_file)
@@ -472,8 +455,15 @@ class Credentials:
     def valid_ticket(self, ticket_file):
         return valid_file(ticket_file)
 
+    def update_domain(self, domain):
+        if self.domain_set:
+            return
+
+        self.domain = domain
+        self.domain_set = True
+
     def as_dict(self):
-        return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'ticket_file':self.ticket_file, 'nthash':self.nthash, 'random_user':self.random_user})}
+        return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'domain':self.domain, 'ticket_file':self.ticket_file, 'nthash':self.nthash, 'random_user':self.random_user})}
 
 
 class SambaTool():
@@ -496,13 +486,13 @@ class SambaTool():
                 # The environment will be later passed to check_output() (see run() below).
                 self.env = os.environ.copy()
                 self.env['KRB5CCNAME'] = self.creds.ticket_file
-                # User and workgroup/domain are taken from the ticket
+                # User and domain are taken from the ticket
                 self.exec += ['-k']
             elif creds.nthash:
-                self.exec += ['-W', f'{target.workgroup}']
+                self.exec += ['-W', f'{self.creds.domain}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.nthash}', '--pw-nt-hash']
             else:
-                self.exec += ['-W', f'{target.workgroup}']
+                self.exec += ['-W', f'{self.creds.domain}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.pw}']
 
         # If the target has a custom Samba configuration attached, we will add it to the
@@ -799,31 +789,32 @@ class ServiceScan():
 ### NetBIOS Enumeration
 
 class EnumNetbios():
-    def __init__(self, target):
+    def __init__(self, target, creds):
         self.target = target
+        self.creds = creds
 
     def run(self):
         '''
-        Run NetBIOS module which collects Netbios names and the workgroup.
+        Run NetBIOS module which collects Netbios names and the workgroup/domain.
         '''
         module_name = ENUM_NETBIOS
-        print_heading(f"NetBIOS Names and Workgroup for {self.target.host}")
-        output = {"workgroup":None, "nmblookup":None}
+        print_heading(f"NetBIOS Names and Workgroup/Domain for {self.target.host}")
+        output = {"domain":None, "nmblookup":None}
 
         nmblookup = self.nmblookup()
         if nmblookup.retval:
-            result = self.get_workgroup(nmblookup.retval)
+            result = self.get_domain(nmblookup.retval)
             if result.retval:
                 print_success(result.retmsg)
-                output["workgroup"] = result.retval
+                output["domain"] = result.retval
             else:
-                output = process_error(result.retmsg, ["workgroup"], module_name, output)
+                output = process_error(result.retmsg, ["domain"], module_name, output)
 
             result = self.nmblookup_to_human(nmblookup.retval)
             print_success(result.retmsg)
             output["nmblookup"] = result.retval
         else:
-            output = process_error(nmblookup.retmsg, ["nmblookup", "workgroup"], module_name, output)
+            output = process_error(nmblookup.retmsg, ["nmblookup", "domain"], module_name, output)
 
         return output
 
@@ -842,19 +833,22 @@ class EnumNetbios():
 
         return Result(result.retmsg, "")
 
-    def get_workgroup(self, nmblookup_result):
+    def get_domain(self, nmblookup_result):
         '''
-        Extract workgroup from given nmblookoup result.
+        Extract domain from given nmblookoup result.
         '''
         match = re.search(r"^\s+(\S+)\s+<00>\s+-\s+<GROUP>\s+", nmblookup_result, re.MULTILINE)
         if match:
-            if valid_workgroup(match.group(1)):
-                workgroup = match.group(1)
+            if valid_domain(match.group(1)):
+                domain = match.group(1)
             else:
-                return Result(None, f"Workgroup {workgroup} contains some illegal characters")
+                return Result(None, f"Workgroup {domain} contains some illegal characters")
         else:
-            return Result(None, "Could not find workgroup/domain")
-        return Result(workgroup, f"Got domain/workgroup name: {workgroup}")
+            return Result(None, "Could not find domain/domain")
+
+        if not self.creds.local_auth:
+            self.creds.update_domain(domain)
+        return Result(domain, f"Got domain/workgroup name: {domain}")
 
     def nmblookup_to_human(self, nmblookup_result):
         '''
@@ -1025,7 +1019,7 @@ class EnumSessions():
 
         # Check null session
         print_info("Check for null session")
-        null_session = self.check_session(Credentials(), self.SESSION_NULL)
+        null_session = self.check_session(Credentials('', '', self.creds.domain), self.SESSION_NULL)
         if null_session.retval:
             sessions[AUTH_NULL] = True
             print_success(null_session.retmsg)
@@ -1062,7 +1056,7 @@ class EnumSessions():
 
         # Check random user session
         print_info("Check for random user")
-        user_session = self.check_session(Credentials(self.creds.random_user, self.creds.pw), self.SESSION_RANDOM)
+        user_session = self.check_session(Credentials(self.creds.random_user, self.creds.pw, self.creds.domain), self.SESSION_RANDOM)
         if user_session.retval:
             sessions["random_user"] = True
             print_success(user_session.retmsg)
@@ -1244,7 +1238,7 @@ class EnumSmbDomainInfo():
         '''
         module_name = ENUM_SMB_DOMAIN_INFO
         print_heading(f"Domain Information via SMB session for {self.target.host}")
-        output = {"domain_info":None}
+        output = {"smb_domain_info":None}
 
         for port in self.target.smb_ports:
             self.target.port = port
@@ -1252,9 +1246,9 @@ class EnumSmbDomainInfo():
             result_smb = self.enum_from_smb()
             if result_smb.retval:
                 print_success(result_smb.retmsg)
-                output["domain_info"] = result_smb.retval
+                output["smb_domain_info"] = result_smb.retval
                 break
-            output = process_error(result_smb.retmsg, ["domain_info"], module_name, output)
+            output = process_error(result_smb.retmsg, ["smb_domain_info"], module_name, output)
 
         return output
 
@@ -1264,7 +1258,7 @@ class EnumSmbDomainInfo():
         some information about the remote system in the SMB "Session Setup Response" or the SMB "Session Setup andX Response"
         packet. These are the domain, DNS domain name as well as DNS host name.
         '''
-        domain_info = {"NetBIOS computer name":None, "NetBIOS domain name":None, "DNS domain":None, "FQDN":None}
+        smb_domain_info = {"NetBIOS computer name":None, "NetBIOS domain name":None, "DNS domain":None, "FQDN":None, "Derived membership":None, "Derived domain/workgroup":None}
 
         smb_conn = None
         try:
@@ -1280,16 +1274,58 @@ class EnumSmbDomainInfo():
         # For SMBv1 we can typically find Domain in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find additional information like the DNS name and the DNS FQDN.
         try:
-            domain_info["NetBIOS domain name"] = smb_conn.getServerDomain()
-            domain_info["NetBIOS computer name"] = smb_conn.getServerName()
-            domain_info["FQDN"] = smb_conn.getServerDNSHostName().rstrip('\x00')
-            domain_info["DNS domain"] = smb_conn.getServerDNSDomainName().rstrip('\x00')
+            smb_domain_info["NetBIOS domain name"] = smb_conn.getServerDomain()
+            smb_domain_info["NetBIOS computer name"] = smb_conn.getServerName()
+            smb_domain_info["FQDN"] = smb_conn.getServerDNSHostName().rstrip('\x00')
+            smb_domain_info["DNS domain"] = smb_conn.getServerDNSDomainName().rstrip('\x00')
         except:
             pass
 
-        if not any(domain_info.values()):
+        # This is based on testing various Windows and Samba setups and might not be 100% correct.
+        # The idea is that when we found a 'NetBIOS domain name' and the FQDN looks 'proper' we conclude
+        # that the machine is a member of a domain (not a workgroup).
+        # Very old Samba instances often only have the NetBIOS domain name set and nothing else. In this case,
+        # the machine is a member of a workgroup with that name.
+        # In all other cases, it can be concluded that the machine is a member of a workgroup. But that does not
+        # mean that the 'NetBIOS domain name' is the same as the machine's workgroup. Therefore, we set the domain
+        # to the 'NetBIOS computer name' which will enforce local authentication.
+
+        if (smb_domain_info["NetBIOS computer name"] and 
+                smb_domain_info["NetBIOS domain name"] and 
+                smb_domain_info["DNS domain"] and
+                smb_domain_info["FQDN"] and 
+                smb_domain_info["DNS domain"] in smb_domain_info["FQDN"] and 
+                '.' in smb_domain_info["FQDN"]):
+
+            smb_domain_info["Derived domain/workgroup"] = smb_domain_info["NetBIOS domain name"]
+            smb_domain_info["Derived membership"] = "domain member"
+ 
+            if not self.creds.local_auth:
+                self.creds.update_domain(smb_domain_info["NetBIOS domain name"])
+        elif (smb_domain_info["NetBIOS domain name"] and
+                not smb_domain_info["NetBIOS computer name"] and
+                not smb_domain_info["FQDN"] and
+                not smb_domain_info["DNS domain"]):
+
+            smb_domain_info["Derived domain/workgroup"] = smb_domain_info["NetBIOS domain name"]
+            smb_domain_info["Derived membership"] = "workgroup member"
+
+            if not self.creds.local_auth:
+                self.creds.update_domain(smb_domain_info["NetBIOS domain name"])
+        elif smb_domain_info["NetBIOS computer name"]:
+
+            smb_domain_info["Derived domain/workgroup"] = "unknown"
+            smb_domain_info["Derived membership"] = "workgroup member"
+
+            if self.creds.local_auth:
+                self.creds.update_domain(smb_domain_info["NetBIOS computer name"])
+        else:
+            # Fallback to local authentication via '.' if nothing else can be found
+            self.creds.update_domain('.')
+
+        if not any(smb_domain_info.values()):
             return Result(None, "Could not enumerate domain information via unauthenticated SMB")
-        return Result(domain_info, f"Found domain information via SMB\n{yamlize(domain_info)}")
+        return Result(smb_domain_info, f"Found domain information via SMB\n{yamlize(smb_domain_info)}")
 
 ### Domain Information Enumeration via lsaquery
 
@@ -1305,19 +1341,19 @@ class EnumLsaqueryDomainInfo():
         '''
         module_name = ENUM_LSAQUERY_DOMAIN_INFO
         print_heading(f"Domain Information via RPC for {self.target.host}")
-        output = {"workgroup":None,
+        output = {"domain":None,
                   "domain_sid":None,
                   "member_of":None}
 
         lsaquery = self.lsaquery()
         if lsaquery.retval is not None:
             # Try to get domain/workgroup from lsaquery
-            result = self.get_workgroup(lsaquery.retval)
+            result = self.get_domain(lsaquery.retval)
             if result.retval:
                 print_success(result.retmsg)
-                output["workgroup"] = result.retval
+                output["domain"] = result.retval
             else:
-                output = process_error(result.retmsg, ["workgroup"], module_name, output)
+                output = process_error(result.retmsg, ["domain"], module_name, output)
 
             # Try to get domain SID
             result = self.get_domain_sid(lsaquery.retval)
@@ -1335,7 +1371,7 @@ class EnumLsaqueryDomainInfo():
             else:
                 output = process_error(result.retmsg, ["member_of"], module_name, output)
         else:
-            output = process_error(lsaquery.retmsg, ["workgroup", "domain_sid", "member_of"], module_name, output)
+            output = process_error(lsaquery.retmsg, ["domain", "domain_sid", "member_of"], module_name, output)
 
         return output
 
@@ -1356,20 +1392,19 @@ class EnumLsaqueryDomainInfo():
             return Result(result.retmsg, "")
         return Result(None, "Could not get information via 'lsaquery'")
 
-    def get_workgroup(self, lsaquery_result):
+    def get_domain(self, lsaquery_result):
         '''
-        Takes the result of rpclient's lsaquery command and tries to extract the workgroup.
+        Takes the result of rpclient's lsaquery command and tries to extract the workgroup/domain.
         '''
-        workgroup = ""
+        domain = ""
         if "Domain Name" in lsaquery_result:
             match = re.search("Domain Name: (.*)", lsaquery_result)
             if match:
-                #FIXME: Validate domain? --> See valid_workgroup()
-                workgroup = match.group(1)
+                domain = match.group(1)
 
-        if workgroup:
-            return Result(workgroup, f"Domain: {workgroup}")
-        return Result(None, "Could not get workgroup from lsaquery")
+        if domain:
+            return Result(domain, f"Domain: {domain}")
+        return Result(None, "Could not get workgroup/domain from lsaquery")
 
     def get_domain_sid(self, lsaquery_result):
         '''
@@ -2450,9 +2485,9 @@ class EnumPolicy():
                 # Currently we let impacket extract user and domain from the ticket
                 smb_conn.kerberosLogin('', self.creds.pw, domain='', useCache=True)
             elif self.creds.nthash:
-                smb_conn.login(self.creds.user, self.creds.pw, domain=self.target.workgroup, nthash=self.creds.nthash)
+                smb_conn.login(self.creds.user, self.creds.pw, domain=self.creds.domain, nthash=self.creds.nthash)
             else:
-                smb_conn.login(self.creds.user, self.creds.pw, self.target.workgroup)
+                smb_conn.login(self.creds.user, self.creds.pw, self.creds.domain)
 
             rpctransport = transport.SMBTransport(smb_connection=smb_conn, filename=r'\samr', remoteName=self.target.host)
             dce = DCERPC_v5(rpctransport)
@@ -2663,8 +2698,8 @@ class Enumerator():
 
         # Init target and creds
         try:
-            self.creds = Credentials(args.user, args.pw, args.ticket_file, args.nthash, args.local_auth)
-            self.target = Target(args.host, args.workgroup, self.creds.auth_method, timeout=args.timeout)
+            self.creds = Credentials(args.user, args.pw, args.domain, args.ticket_file, args.nthash, args.local_auth)
+            self.target = Target(args.host, self.creds, timeout=args.timeout)
         except Exception as e:
             raise RuntimeError(str(e))
 
@@ -2776,15 +2811,11 @@ class Enumerator():
         if ENUM_LDAP_DOMAIN_INFO in modules:
             result = EnumLdapDomainInfo(self.target).run()
             self.output.update(result)
-            if not self.creds.local_auth and not self.target.workgroup and result["long_domain"]:
-                self.target.update_workgroup(result["long_domain"], True)
 
-        # Try to retrieve workstation and nbtstat information
+        # Try to retrieve workstation/domain and nbtstat information
         if ENUM_NETBIOS in modules:
-            result = EnumNetbios(self.target).run()
+            result = EnumNetbios(self.target, self.creds).run()
             self.output.update(result)
-            if not self.creds.local_auth and not self.target.workgroup and result["workgroup"]:
-                self.target.update_workgroup(result["workgroup"])
 
         # Enumerate supported SMB versions
         if ENUM_SMB in modules:
@@ -2794,10 +2825,6 @@ class Enumerator():
         # Try to get domain name and sid via lsaquery
         if ENUM_SMB_DOMAIN_INFO in modules:
             result = EnumSmbDomainInfo(self.target, self.creds).run()
-            # If the user requested local-auth we take the NetBIOS computer name as workgroup.
-            # This will enforce usage of the local rather than the domain SAM. See smbclient man page.
-            if self.creds.local_auth and result["domain_info"]:
-                self.target.update_workgroup(result["domain_info"]["NetBIOS computer name"])
             self.output.update(result)
 
         # Check for various session types including null sessions
@@ -2815,8 +2842,6 @@ class Enumerator():
         if ENUM_LSAQUERY_DOMAIN_INFO in modules:
             result = EnumLsaqueryDomainInfo(self.target, self.creds).run()
             self.output.update(result)
-            if not self.creds.local_auth and not self.target.workgroup and result["workgroup"]:
-                self.target.update_workgroup(result["workgroup"])
 
         # Get OS information like os version, server type string...
         if ENUM_OS_INFO in modules:
@@ -2983,8 +3008,8 @@ def valid_rid(rid):
         return True
     return False
 
-def valid_workgroup(workgroup):
-    if re.match(r"^[A-Za-z0-9_\.-]+$", workgroup):
+def valid_domain(domain):
+    if re.match(r"^[A-Za-z0-9_\.-]+$", domain):
         return True
     return False
 
@@ -3139,7 +3164,7 @@ def check_arguments():
     parser.add_argument("-I", action="store_true", help="Get printer information via RPC")
     parser.add_argument("-R", action="store_true", help="Enumerate users via RID cycling")
     parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output")
-    parser.add_argument("-w", dest="workgroup", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
+    parser.add_argument("-w", dest="domain", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
     auth_methods = parser.add_mutually_exclusive_group()
     auth_methods.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
@@ -3178,10 +3203,10 @@ def check_arguments():
     GLOBAL_VERBOSE = args.verbose
 
     # Check Workgroup
-    # Do not set the workgroup for local auth
-    if not args.local_auth and args.workgroup:
-        if not valid_workgroup(args.workgroup):
-            raise RuntimeError(f"Workgroup '{args.workgroup}' contains illegal character")
+    # Do not set the domain/workgroup for local auth
+    if not args.local_auth and args.domain:
+        if not valid_domain(args.domain):
+            raise RuntimeError(f"Workgroup/domain '{args.domain}' contains illegal character")
 
     # Check for RID ranges
     if not valid_rid_ranges(args.ranges):
