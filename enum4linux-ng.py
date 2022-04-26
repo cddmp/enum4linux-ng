@@ -1341,9 +1341,10 @@ class EnumLsaqueryDomainInfo():
         '''
         module_name = ENUM_LSAQUERY_DOMAIN_INFO
         print_heading(f"Domain Information via RPC for {self.target.host}")
-        output = {"domain":None,
-                  "domain_sid":None,
-                  "member_of":None}
+        output = {}
+        rpc_domain_info = {"Domain":None,
+                           "Domain SID":None,
+                           "Member of":None}
 
         lsaquery = self.lsaquery()
         if lsaquery.retval is not None:
@@ -1351,28 +1352,29 @@ class EnumLsaqueryDomainInfo():
             result = self.get_domain(lsaquery.retval)
             if result.retval:
                 print_success(result.retmsg)
-                output["domain"] = result.retval
+                rpc_domain_info["Domain"] = result.retval
             else:
-                output = process_error(result.retmsg, ["domain"], module_name, output)
+                output = process_error(result.retmsg, ["rpc_domain_info"], module_name, output)
 
             # Try to get domain SID
             result = self.get_domain_sid(lsaquery.retval)
             if result.retval:
                 print_success(result.retmsg)
-                output["domain_sid"] = result.retval
+                rpc_domain_info["Domain SID"] = result.retval
             else:
-                output = process_error(result.retmsg, ["domain_sid"], module_name, output)
+                output = process_error(result.retmsg, ["rpc_domain_info"], module_name, output)
 
             # Is the host part of a domain or a workgroup?
             result = self.check_is_part_of_workgroup_or_domain(lsaquery.retval)
             if result.retval:
                 print_success(result.retmsg)
-                output["member_of"] = result.retval
+                rpc_domain_info["Member of"] = result.retval
             else:
-                output = process_error(result.retmsg, ["member_of"], module_name, output)
+                output = process_error(result.retmsg, ["rpc_domain_info"], module_name, output)
         else:
-            output = process_error(lsaquery.retmsg, ["domain", "domain_sid", "member_of"], module_name, output)
+            output = process_error(lsaquery.retmsg, ["rpc_domain_info"], module_name, output)
 
+        output["rpc_domain_info"] = rpc_domain_info
         return output
 
     def lsaquery(self):
