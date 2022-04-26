@@ -2422,18 +2422,18 @@ class EnumPolicy():
         try:
             domain_passwd = samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
             result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_passwd)
-            policy["domain_password_information"] = {}
-            policy["domain_password_information"]["pw_history_length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
-            policy["domain_password_information"]["min_pw_length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
-            policy["domain_password_information"]["min_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
-            policy["domain_password_information"]["max_pw_age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
-            policy["domain_password_information"]["pw_properties"] = []
+            policy["Domain password information"] = {}
+            policy["Domain password information"]["Password history length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
+            policy["Domain password information"]["Minimum password length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
+            policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
+            policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
+            policy["Domain password information"]["Password properties"] = []
             pw_prop = result['Buffer']['Password']['PasswordProperties']
             for bitmask in DOMAIN_FIELDS:
                 if pw_prop & bitmask == bitmask:
-                    policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:True})
+                    policy["Domain password information"]["Password properties"].append({DOMAIN_FIELDS[bitmask]:True})
                 else:
-                    policy["domain_password_information"]["pw_properties"].append({DOMAIN_FIELDS[bitmask]:False})
+                    policy["Domain password information"]["Password properties"].append({DOMAIN_FIELDS[bitmask]:False})
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
@@ -2444,10 +2444,10 @@ class EnumPolicy():
         try:
             domain_lockout = samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
             result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_lockout)
-            policy["domain_lockout_information"] = {}
-            policy["domain_lockout_information"]["lockout_observation_window"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
-            policy["domain_lockout_information"]["lockout_duration"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
-            policy["domain_lockout_information"]["lockout_threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
+            policy["Domain lockout information"] = {}
+            policy["Domain lockout information"]["Lockout observation window"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
+            policy["Domain lockout information"]["Lockout duration"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
+            policy["Domain lockout information"]["Lockout threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
@@ -2458,8 +2458,8 @@ class EnumPolicy():
         try:
             domain_logoff = samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation
             result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
-            policy["domain_logoff_information"] = {}
-            policy["domain_logoff_information"]["force_logoff_time"] = self.policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
+            policy["Domain logoff information"] = {}
+            policy["Domain logoff information"]["Force logoff time"] = self.policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
