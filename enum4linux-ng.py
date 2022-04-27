@@ -1266,7 +1266,7 @@ class EnumSmbDomainInfo():
         some information about the remote system in the SMB "Session Setup Response" or the SMB "Session Setup andX Response"
         packet. These are the domain, DNS domain name as well as DNS host name.
         '''
-        smb_domain_info = {"NetBIOS computer name":None, "NetBIOS domain name":None, "DNS domain":None, "FQDN":None, "Derived membership":None, "Derived domain/workgroup":None}
+        smb_domain_info = {"NetBIOS computer name":None, "NetBIOS domain name":None, "DNS domain":None, "FQDN":None, "Derived membership":None, "Derived domain":None}
 
         smb_conn = None
         try:
@@ -1305,7 +1305,7 @@ class EnumSmbDomainInfo():
                 smb_domain_info["DNS domain"] in smb_domain_info["FQDN"] and 
                 '.' in smb_domain_info["FQDN"]):
 
-            smb_domain_info["Derived domain/workgroup"] = smb_domain_info["NetBIOS domain name"]
+            smb_domain_info["Derived domain"] = smb_domain_info["NetBIOS domain name"]
             smb_domain_info["Derived membership"] = "domain member"
  
             if not self.creds.local_auth:
@@ -1315,14 +1315,14 @@ class EnumSmbDomainInfo():
                 not smb_domain_info["FQDN"] and
                 not smb_domain_info["DNS domain"]):
 
-            smb_domain_info["Derived domain/workgroup"] = smb_domain_info["NetBIOS domain name"]
+            smb_domain_info["Derived domain"] = smb_domain_info["NetBIOS domain name"]
             smb_domain_info["Derived membership"] = "workgroup member"
 
             if not self.creds.local_auth:
                 self.creds.set_domain(smb_domain_info["NetBIOS domain name"])
         elif smb_domain_info["NetBIOS computer name"]:
 
-            smb_domain_info["Derived domain/workgroup"] = "unknown"
+            smb_domain_info["Derived domain"] = "unknown"
             smb_domain_info["Derived membership"] = "workgroup member"
 
             if self.creds.local_auth:
@@ -1353,7 +1353,7 @@ class EnumLsaqueryDomainInfo():
         output = {}
         rpc_domain_info = {"Domain":None,
                            "Domain SID":None,
-                           "Member of":None}
+                           "Membership":None}
 
         lsaquery = self.lsaquery()
         if lsaquery.retval is not None:
@@ -1385,7 +1385,7 @@ class EnumLsaqueryDomainInfo():
             result = self.check_is_part_of_workgroup_or_domain(lsaquery.retval)
             if result.retval:
                 print_success(result.retmsg)
-                rpc_domain_info["Member of"] = result.retval
+                rpc_domain_info["Membership"] = result.retval
             else:
                 output = process_error(result.retmsg, ["rpc_domain_info"], module_name, output)
         else:
@@ -1437,7 +1437,7 @@ class EnumLsaqueryDomainInfo():
             if match:
                 domain_sid = match.group(1)
         if domain_sid:
-            return Result(domain_sid, f"SID: {domain_sid}")
+            return Result(domain_sid, f"Domain SID: {domain_sid}")
         return Result(None, "Could not get domain SID from lsaquery")
 
     def check_is_part_of_workgroup_or_domain(self, lsaquery_result):
@@ -1446,9 +1446,9 @@ class EnumLsaqueryDomainInfo():
         is part of a domain or workgroup.
         '''
         if "Domain Sid: S-0-0" in lsaquery_result or "Domain Sid: (NULL SID)" in lsaquery_result:
-            return Result("workgroup", "Host is part of a workgroup (not a domain)")
+            return Result("workgroup member", "Membership: workgroup member")
         if re.search(r"Domain Sid: S-\d+-\d+-\d+-\d+-\d+-\d+", lsaquery_result):
-            return Result("domain", "Host is part of a domain (not a workgroup)")
+            return Result("domain member", "Membership: domain member")
         return Result(False, "Could not determine if host is part of domain or part of a workgroup")
 
 ### OS Information Enumeration
