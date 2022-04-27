@@ -419,11 +419,14 @@ class Credentials:
         self.random_user = ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(8))
         self.user = user
         self.pw = pw
-        self.domain = domain
         self.ticket_file = ticket_file
         self.nthash = nthash
         self.local_auth = local_auth
-        self.domain_set = False
+
+        # Only set the domain here, if it is not empty
+        self.domain = ''
+        if domain:
+            self.set_domain(domain)
 
         if ticket_file:
             result = self.valid_ticket(ticket_file)
@@ -455,12 +458,17 @@ class Credentials:
     def valid_ticket(self, ticket_file):
         return valid_file(ticket_file)
 
-    def update_domain(self, domain):
-        if self.domain_set:
-            return
-
-        self.domain = domain
-        self.domain_set = True
+    # Allows various modules to set the domain during enumeration. The domain can only be set once.
+    # Currently, we rely on the information gained via unauth smb session to guess the domain.
+    # At a later call of lsaquery it might turn out that the domain is different. In this case the
+    # user will be informed via print_hint()
+    def set_domain(self, domain):
+        if self.domain and self.domain == domain:
+            return True
+        if not self.domain:
+            self.domain = domain
+            return True
+        return False
 
     def as_dict(self):
         return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'domain':self.domain, 'ticket_file':self.ticket_file, 'nthash':self.nthash, 'random_user':self.random_user})}
@@ -847,7 +855,7 @@ class EnumNetbios():
             return Result(None, "Could not find domain/domain")
 
         if not self.creds.local_auth:
-            self.creds.update_domain(domain)
+            self.creds.set_domain(domain)
         return Result(domain, f"Got domain/workgroup name: {domain}")
 
     def nmblookup_to_human(self, nmblookup_result):
@@ -1301,7 +1309,7 @@ class EnumSmbDomainInfo():
             smb_domain_info["Derived membership"] = "domain member"
  
             if not self.creds.local_auth:
-                self.creds.update_domain(smb_domain_info["NetBIOS domain name"])
+                self.creds.set_domain(smb_domain_info["NetBIOS domain name"])
         elif (smb_domain_info["NetBIOS domain name"] and
                 not smb_domain_info["NetBIOS computer name"] and
                 not smb_domain_info["FQDN"] and
@@ -1311,17 +1319,18 @@ class EnumSmbDomainInfo():
             smb_domain_info["Derived membership"] = "workgroup member"
 
             if not self.creds.local_auth:
-                self.creds.update_domain(smb_domain_info["NetBIOS domain name"])
+                self.creds.set_domain(smb_domain_info["NetBIOS domain name"])
         elif smb_domain_info["NetBIOS computer name"]:
 
             smb_domain_info["Derived domain/workgroup"] = "unknown"
             smb_domain_info["Derived membership"] = "workgroup member"
 
             if self.creds.local_auth:
-                self.creds.update_domain(smb_domain_info["NetBIOS computer name"])
-        else:
-            # Fallback to local authentication via '.' if nothing else can be found
-            self.creds.update_domain('.')
+                self.creds.set_domain(smb_domain_info["NetBIOS computer name"])
+
+        # Fallback to default workgroup 'WORKGROUP' if nothing else can be found
+        if not self.creds.domain:
+            self.creds.set_domain('WORKGROUP')
 
         if not any(smb_domain_info.values()):
             return Result(None, "Could not enumerate domain information via unauthenticated SMB")
@@ -1353,6 +1362,14 @@ class EnumLsaqueryDomainInfo():
             if result.retval:
                 print_success(result.retmsg)
                 rpc_domain_info["Domain"] = result.retval
+
+                # In previous enumeration steps the domain was enumerated via unauthenticated
+                # SMB session. The domain found there might not be correct. Therefore, we only inform
+                # the user that we found a different domain via lsaquery. Jumping back to the session
+                # checks does not make sense. If the user was able to call lsaquery, he is already
+                # authenticated (likely via null session).
+                if not self.creds.local_auth and not self.creds.set_domain(result.retval):
+                    print_hint(f"Found domain/workgroup '{result.retval}' which is different from the currently used one '{self.creds.domain}'.")
             else:
                 output = process_error(result.retmsg, ["rpc_domain_info"], module_name, output)
 
