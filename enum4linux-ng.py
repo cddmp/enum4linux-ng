@@ -463,7 +463,7 @@ class Credentials:
     # At a later call of lsaquery it might turn out that the domain is different. In this case the
     # user will be informed via print_hint()
     def set_domain(self, domain):
-        if self.domain and self.domain == domain:
+        if self.domain and self.domain.lower() == domain.lower():
             return True
         if not self.domain:
             self.domain = domain
