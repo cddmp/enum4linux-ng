@@ -14,6 +14,9 @@ enum4linux-ng.py is a rewrite of Mark Lowe's (former Portcullis Labs now Cisco C
 
 I made it for educational purposes for myself and to overcome issues with enum4linux.pl. It has the same functionality as the original tool (though it does some things [differently](#Differences)). Other than the original tool it parses all output of the Samba tools and allows to export all findings as YAML or JSON file. The idea behind this is to allow other tools to import the findings and further process them. It is planned to add new features in the future.
 
+## 🔴 Important:
+There is a more advanced version in the dev branch (https://github.com/cddmp/enum4linux-ng/tree/dev). Though I try to test the development version in various environments, I'm limited in the amount of different machines I have access to. Therefore, it would help me a lot, if you could use the dev version and report back any issues.
+
 ## Features
 - support for YAML and JSON export
 - colored console output (can be disabled via [NO_COLOR](https://no-color.org/))
