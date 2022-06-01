@@ -994,6 +994,11 @@ class EnumSmb():
                     output["Preferred Dialect"] = "> SMB 3.0"
 
         output["Supported dialects"] = supported
+
+        # When we end up here, a preferred dialect must have been set. If this is still set to None,
+        # we can conclude that the target does not support any dialect at all.
+        if not output["Preferred dialect"]:
+            return Result(None, f"No supported dialects found")
         return Result(output, f"Supported dialects and settings:\n{yamlize(output)}")
 
 ### Session Checks
