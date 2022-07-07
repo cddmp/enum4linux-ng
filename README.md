@@ -18,6 +18,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 - support for YAML and JSON export
 - colored console output (can be disabled via [NO_COLOR](https://no-color.org/))
 - ldapsearch und polenum are natively implemented
+- support for multiple authentication methods
 - support for legacy SMBv1 connections
 - auto detection of IPC signing support
 - 'smart' enumeration will automatically disable tests which would otherwise fail
@@ -70,21 +71,20 @@ This time the ```-A``` and ```-C``` option are used. While the first one behaves
 ```
 ENUM4LINUX - next generation
 
-usage: enum4linux-ng.py [-h] [-A] [-As] [-U] [-G] [-Gm] [-S] [-C] [-P] [-O] [-L] [-I] [-R] [-N] [-w WORKGROUP] [-u USER] [-p PW] [-d] [-k USERS] [-r RANGES] [-s SHARES_FILE] [-t TIMEOUT]
-                        [-v] [-oJ OUT_JSON_FILE | -oY OUT_YAML_FILE | -oA OUT_FILE]
+usage: enum4linux-ng.py [-h] [-A] [-As] [-U] [-G] [-Gm] [-S] [-C] [-P] [-O] [-L] [-I] [-R] [-N] [-w DOMAIN] [-u USER] [-p PW | -K TICKET_FILE | -H NTHASH] [--local-auth] [-d] [-k USERS] [-r RANGES] [-s SHARES_FILE] [-t TIMEOUT]
+                        [-v] [--keep] [-oJ OUT_JSON_FILE | -oY OUT_YAML_FILE | -oA OUT_FILE]
                         host
 
-This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems. It is mainly a wrapper around the Samba tools nmblookup, net,
-rpcclient and smbclient. Other than the original tool it allows to export enumeration results as YAML or JSON file, so that it can be further processed with other tools. The tool tries to
-do a 'smart' enumeration. It first checks whether SMB or LDAP is accessible on the target. Depending on the result of this check, it will dynamically skip checks (e.g. LDAP checks if LDAP
-is not running). If SMB is accessible, it will always check whether a session can be set up or not. If no session can be set up, the tool will stop enumeration. The enumeration process can
-be interupted with CTRL+C. If the options -oJ or -oY are provided, the tool will write out the current enumeration state to the JSON or YAML file, once it receives SIGINT triggered by
-CTRL+C. The tool was made for security professionals and CTF players. Illegal use is prohibited.
+This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems. It is mainly a wrapper around the Samba tools nmblookup, net, rpcclient and smbclient. Other than the original
+tool it allows to export enumeration results as YAML or JSON file, so that it can be further processed with other tools. The tool tries to do a 'smart' enumeration. It first checks whether SMB or LDAP is accessible on the target.
+Depending on the result of this check, it will dynamically skip checks (e.g. LDAP checks if LDAP is not running). If SMB is accessible, it will always check whether a session can be set up or not. If no session can be set up, the
+tool will stop enumeration. The enumeration process can be interupted with CTRL+C. If the options -oJ or -oY are provided, the tool will write out the current enumeration state to the JSON or YAML file, once it receives SIGINT
+triggered by CTRL+C. The tool was made for security professionals and CTF players. Illegal use is prohibited.
 
 positional arguments:
   host
 
-optional arguments:
+options:
   -h, --help         show this help message and exit
   -A                 Do all simple enumeration including nmblookup (-U -G -S -P -O -N -I -L). This option is enabled if you don't provide any other option.
   -As                Do all simple short enumeration without NetBIOS names lookup (-U -G -S -P -O -I -L)
@@ -99,11 +99,14 @@ optional arguments:
   -I                 Get printer information via RPC
   -R                 Enumerate users via RID cycling
   -N                 Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output
-  -w WORKGROUP       Specify workgroup/domain manually (usually found automatically)
+  -w DOMAIN          Specify workgroup/domain manually (usually found automatically)
   -u USER            Specify username to use (default "")
   -p PW              Specify password to use (default "")
+  -K TICKET_FILE     Try to authenticate with Kerberos, only useful in Active Directory environment
+  -H NTHASH          Try to authenticate with hash
+  --local-auth       Authenticate locally to target
   -d                 Get detailed information for users and groups, applies to -U, -G and -R
-  -k USERS           User(s) that exists on remote system (default: administrator,guest,krbtgt,domain admins,root,bin,none). Used to get sid with "lookupsid known_username"
+  -k USERS           User(s) that exists on remote system (default: administrator,guest,krbtgt,domain admins,root,bin,none). Used to get sid with "lookupsids"
   -r RANGES          RID ranges to enumerate (default: 500-550,1000-1050)
   -s SHARES_FILE     Brute force guessing for shares
   -t TIMEOUT         Sets connection timeout in seconds (default: 5s)
