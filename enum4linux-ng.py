@@ -545,6 +545,9 @@ class SambaTool():
                 output = output.replace(line, "")
         output = output.rstrip('\n')
 
+        if "Cannot find KDC for realm" in output:
+            return Result(False, "Cannot find KDC for realm, check DNS settings or setup /etc/krb5.conf")
+
         if retval == 1 and not output:
             return Result(False, "empty response")
 
