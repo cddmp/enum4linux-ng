@@ -495,7 +495,13 @@ class SambaTool():
                 self.env = os.environ.copy()
                 self.env['KRB5CCNAME'] = self.creds.ticket_file
                 # User and domain are taken from the ticket
-                self.exec += ['-k']
+                # Kerberos options differ between samba versions
+                samba_version = re.match(r".*(\d+\.\d+\.\d+).*", check_output(["smbclient", "--version"]).decode()).group(1)
+                samba_version = tuple(int(x) for x in samba_version.split('.'))
+                if samba_version < (4, 15, 0):
+                    self.exec += ['-k']
+                else:
+                    self.exec += ['--use-krb5-ccache', self.creds.ticket_file]
             elif creds.nthash:
                 self.exec += ['-W', f'{self.creds.domain}']
                 self.exec += ['-U', f'{self.creds.user}%{self.creds.nthash}', '--pw-nt-hash']
