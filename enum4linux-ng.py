@@ -298,7 +298,6 @@ ENUM_SMB_DOMAIN_INFO = "enum_smb_domain_info"
 ENUM_LSAQUERY_DOMAIN_INFO = "enum_lsaquery_domain_info"
 ENUM_USERS_RPC = "enum_users_rpc"
 ENUM_GROUPS_RPC = "enum_groups_rpc"
-ENUM_SERVICES = "services_check"
 ENUM_SHARES = "enum_shares"
 ENUM_SERVICES = "enum_services"
 ENUM_POLICY = "enum_policy"
@@ -376,6 +375,7 @@ class Target:
         self.ip_version = None
         self.smb_ports = []
         self.ldap_ports = []
+        self.listeners = []
         self.services = []
         self.smb_preferred_dialect = None
         self.smb1_supported = False
@@ -749,31 +749,31 @@ class ServiceScan():
     def __init__(self, target, scan_list):
         self.target = target
         self.scan_list = scan_list
-        self.services = OrderedDict({})
+        self.listeners = OrderedDict({})
 
     def run(self):
         module_name = ENUM_SERVICES
         output = {}
 
-        print_heading(f"Service Scan on {self.target.host}")
-        for service, port in SERVICES.items():
-            if service not in self.scan_list:
+        print_heading(f"Listener Scan on {self.target.host}")
+        for listener, port in SERVICES.items():
+            if listener not in self.scan_list:
                 continue
 
-            print_info(f"Checking {service}")
-            result = self.check_accessible(service, port)
+            print_info(f"Checking {listener}")
+            result = self.check_accessible(listener, port)
             if result.retval:
                 print_success(result.retmsg)
             else:
-                output = process_error(result.retmsg, ["services"], module_name, output)
+                output = process_error(result.retmsg, ["listeners"], module_name, output)
 
-            self.services[service] = {"port": port, "accessible": result.retval}
+            self.listeners[listener] = {"port": port, "accessible": result.retval}
 
-        output["services"] = self.services
+        output["listeners"] = self.listeners
 
         return output
 
-    def check_accessible(self, service, port):
+    def check_accessible(self, listener, port):
         if self.target.ip_version == 6:
             address_family = socket.AF_INET6
         elif self.target.ip_version == 4:
@@ -784,22 +784,22 @@ class ServiceScan():
             sock.settimeout(self.target.timeout)
             result = sock.connect_ex((self.target.host, port))
             if result == 0:
-                return Result(True, f"{service} is accessible on {port}/tcp")
-            return Result(False, f"Could not connect to {service} on {port}/tcp: {SOCKET_ERRORS[result]}")
+                return Result(True, f"{listener} is accessible on {port}/tcp")
+            return Result(False, f"Could not connect to {listener} on {port}/tcp: {SOCKET_ERRORS[result]}")
         except Exception:
-            return Result(False, f"Could not connect to {service} on {port}/tcp")
+            return Result(False, f"Could not connect to {listener} on {port}/tcp")
 
     def get_accessible_services(self):
         accessible = []
-        for service, entry in self.services.items():
+        for listener, entry in self.listeners.items():
             if entry["accessible"] is True:
-                accessible.append(service)
+                accessible.append(listener)
         return accessible
 
     def get_accessible_ports_by_pattern(self, pattern):
         accessible = []
-        for service, entry in self.services.items():
-            if pattern in service and entry["accessible"] is True:
+        for listener, entry in self.listeners.items():
+            if pattern in listener and entry["accessible"] is True:
                 accessible.append(entry["port"])
         return accessible
 
@@ -2694,14 +2694,14 @@ class EnumServices():
 
     def enum(self):
         '''
-        Tries to enum services via net rpc serivce list.
+        Tries to enum RPC services via net rpc service list.
         '''
 
-        result = SambaNet(['rpc', 'service', 'list'], self.target, self.creds).run(log='Attempting to get services')
+        result = SambaNet(['rpc', 'service', 'list'], self.target, self.creds).run(log='Attempting to get RPC services')
         services = {}
 
         if not result.retval:
-            return Result(None, f"Could not get services via 'net rpc service list': {result.retmsg}")
+            return Result(None, f"Could not get RPC services via 'net rpc service list': {result.retmsg}")
 
         match_list = re.findall(r"([^\s]*)\s*\"(.*)\"", result.retmsg, re.MULTILINE)
         if not match_list:
@@ -2776,9 +2776,9 @@ class Enumerator():
         # SMB and LDAP, simple TCP connect scan is used for that. From the result
         # of the scan and the arguments passed in by the user, a list of modules
         # is generated. These modules will then be run.
-        services = self.service_scan()
-        self.target.services = services
-        modules = self.get_modules(services)
+        listeners = self.service_scan()
+        self.target.listeners = listeners
+        modules = self.get_modules(listeners)
         self.run_modules(modules)
 
     def service_scan(self):
@@ -2796,16 +2796,16 @@ class Enumerator():
         self.target.ldap_ports = scanner.get_accessible_ports_by_pattern("LDAP")
         return scanner.get_accessible_services()
 
-    def get_modules(self, services, session=True):
+    def get_modules(self, listeners, session=True):
         modules = []
         if self.args.N:
             modules.append(ENUM_NETBIOS)
 
-        if SERVICE_LDAP in services or SERVICE_LDAPS in services:
+        if SERVICE_LDAP in listeners or SERVICE_LDAPS in listeners:
             if self.args.L:
                 modules.append(ENUM_LDAP_DOMAIN_INFO)
 
-        if SERVICE_SMB in services or SERVICE_SMB_NETBIOS in services:
+        if SERVICE_SMB in listeners or SERVICE_SMB_NETBIOS in listeners:
             modules.append(ENUM_SMB)
             modules.append(ENUM_SMB_DOMAIN_INFO)
             modules.append(ENUM_SESSIONS)
@@ -2869,7 +2869,7 @@ class Enumerator():
         # If sessions are not possible, we regenerate the list of modules again.
         # This will only leave those modules in, which don't require authentication.
         if self.target.sessions and not self.target.sessions[self.creds.auth_method]:
-            modules = self.get_modules(self.target.services, session=False)
+            modules = self.get_modules(self.target.listeners, session=False)
 
         # Try to get domain name and sid via lsaquery
         if ENUM_LSAQUERY_DOMAIN_INFO in modules:
@@ -2891,7 +2891,7 @@ class Enumerator():
             result = EnumGroupsRpc(self.target, self.creds, self.args.Gm, self.args.d).run()
             self.output.update(result)
 
-        # Enum services
+        # Enum RPC services
         if ENUM_SERVICES in modules:
             result = EnumServices(self.target, self.creds).run()
             self.output.update(result)
@@ -2923,12 +2923,12 @@ class Enumerator():
             result = BruteForceShares(self.share_brute_params, self.target, self.creds).run()
             self.output.update(result)
 
-        if not self.target.services:
+        if not self.target.listeners:
             warn("Aborting remainder of tests since neither SMB nor LDAP are accessible")
         elif self.target.sessions['sessions_possible'] and not self.target.sessions[self.creds.auth_method]:
             warn("Aborting remainder of tests, sessions are possible, but not with the provided credentials (see session check results)")
         elif not self.target.sessions['sessions_possible']:
-            if SERVICE_SMB not in self.target.services and SERVICE_SMB_NETBIOS not in self.target.services:
+            if SERVICE_SMB not in self.target.listeners and SERVICE_SMB_NETBIOS not in self.target.listeners:
                 warn("Aborting remainder of tests since SMB is not accessible")
             else:
                 warn("Aborting remainder of tests since sessions failed, rerun with valid credentials")
