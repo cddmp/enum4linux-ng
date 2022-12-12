@@ -312,9 +312,10 @@ RID_RANGES = "500-550,1000-1050"
 KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
 TIMEOUT = 5
 
-# GLOBAL_VERBOSE and GLOBAL_COLORS should be the only variables which should be written to
+# GLOBAL_VERBOSE, GLOBAL_COLORS, GLOBAL_SAMBA_LEGACY should be the only variables which should be written to
 GLOBAL_VERBOSE = False
 GLOBAL_COLORS = True
+GLOBAL_SAMBA_LEGACY = False
 
 class Colors:
     ansi_reset = '\033[0m'
@@ -496,10 +497,8 @@ class SambaTool():
                 self.env = os.environ.copy()
                 self.env['KRB5CCNAME'] = self.creds.ticket_file
                 # User and domain are taken from the ticket
-                # Kerberos options differ between samba versions
-                samba_version = re.match(r".*(\d+\.\d+\.\d+).*", check_output(["smbclient", "--version"]).decode()).group(1)
-                samba_version = tuple(int(x) for x in samba_version.split('.'))
-                if samba_version < (4, 15, 0):
+                # Kerberos options differ between samba versions - TODO: Can be removed in the future
+                if GLOBAL_SAMBA_LEGACY:
                     self.exec += ['-k']
                 else:
                     self.exec += ['--use-krb5-ccache', self.creds.ticket_file]
@@ -3171,6 +3170,7 @@ def check_arguments():
     '''
 
     global GLOBAL_VERBOSE
+    global GLOBAL_SAMBA_LEGACY
 
     parser = ArgumentParser(description="""This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems.
             It is mainly a wrapper around the Samba tools nmblookup, net, rpcclient and smbclient. Other than the original tool it allows to export enumeration results
@@ -3261,17 +3261,18 @@ def check_arguments():
         raise RuntimeError("Timeout must be a valid integer in the range 1-600")
     args.timeout = int(args.timeout)
 
+    # Perform Samba version checks - TODO: Can be removed in the future
+    samba_version = re.match(r".*(\d+\.\d+\.\d+).*", check_output(["smbclient", "--version"]).decode()).group(1)
+    samba_version = tuple(int(x) for x in samba_version.split('.'))
+    if samba_version < (4, 15, 0):
+        GLOBAL_SAMBA_LEGACY = True
+
     # While smbclient and rpcclient support '--pw-nt-hash' the net command does not before Samba 4.15.
     # In Samba 4.15 the commandline parser of the various tools were unified so that '--pw-nt-hash' works
     # for this and later versions. An option would be to run the tool in a docker container like a recent
     # Alpine Linux version.
-    if args.nthash and (args.Gm or args.C):
-        try:
-            output = check_output(['net','help'], shell=False, stderr=STDOUT)
-        except Exception as e:
-            output = str(e.output)
-        if '--pw-nt-hash' not in output:
-            raise RuntimeError("The -C and -Gm argument require Samba 4.15 or higher when used in combination with -H")
+    if GLOBAL_SAMBA_LEGACY and args.nthash and (args.Gm or args.C):
+        raise RuntimeError("The -C and -Gm argument require Samba 4.15 or higher when used in combination with -H")
 
     return args
 
