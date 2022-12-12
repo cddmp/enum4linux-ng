@@ -277,7 +277,7 @@ SOCKET_ERRORS = {
         113: "no route to host"
         }
 
-# This is needed for the ServiceScan class
+# This is needed for the ListenersScan class
 SERVICE_LDAP = "LDAP"
 SERVICE_LDAPS = "LDAPS"
 SERVICE_SMB = "SMB"
@@ -300,6 +300,7 @@ ENUM_USERS_RPC = "enum_users_rpc"
 ENUM_GROUPS_RPC = "enum_groups_rpc"
 ENUM_SHARES = "enum_shares"
 ENUM_SERVICES = "enum_services"
+ENUM_LISTENERS = "enum_listeners"
 ENUM_POLICY = "enum_policy"
 ENUM_PRINTERS = "enum_printers"
 ENUM_OS_INFO = "enum_os_info"
@@ -743,16 +744,16 @@ class Output:
     def as_dict(self):
         return self.out_dict
 
-### Service Scans
+### Listeners Scans
 
-class ServiceScan():
+class ListenersScan():
     def __init__(self, target, scan_list):
         self.target = target
         self.scan_list = scan_list
         self.listeners = OrderedDict({})
 
     def run(self):
-        module_name = ENUM_SERVICES
+        module_name = ENUM_LISTENERS
         output = {}
 
         print_heading(f"Listener Scan on {self.target.host}")
@@ -789,7 +790,7 @@ class ServiceScan():
         except Exception:
             return Result(False, f"Could not connect to {listener} on {port}/tcp")
 
-    def get_accessible_services(self):
+    def get_accessible_listeners(self):
         accessible = []
         for listener, entry in self.listeners.items():
             if entry["accessible"] is True:
@@ -2789,12 +2790,12 @@ class Enumerator():
         if self.args.L:
             scan_list += [SERVICE_LDAP, SERVICE_LDAPS]
 
-        scanner = ServiceScan(self.target, scan_list)
+        scanner = ListenersScan(self.target, scan_list)
         result = scanner.run()
         self.output.update(result)
         self.target.smb_ports = scanner.get_accessible_ports_by_pattern("SMB")
         self.target.ldap_ports = scanner.get_accessible_ports_by_pattern("LDAP")
-        return scanner.get_accessible_services()
+        return scanner.get_accessible_listeners()
 
     def get_modules(self, listeners, session=True):
         modules = []
