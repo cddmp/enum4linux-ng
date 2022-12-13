@@ -1852,25 +1852,31 @@ class EnumUsersRpc():
         if match:
             user_info = match.group(1)
 
-            regexMatch = r'^\t[A-Za-z][A-Za-z\s_\.0-9]*(:|\[[0-9\.]+\]\.\.\.)(\t|\s)?'
-
             for line in filter(None, user_info.split('\n')):
-                if re.match(regexMatch, line):
+                if re.match(r'^\t[A-Za-z][A-Za-z\s_\.0-9]*(:|\[[0-9\.]+\]\.\.\.)(\t|\s)?', line):
                     if ":" in line:
                         key, value = line.split(":", 1)
                     if "..." in line:
                         key, value = line.split("...", 1)
 
+                    # Skip user and full name, we have this information already
                     if "User Name" in key or "Full Name" in key:
                         continue
+
                     key = key.strip()
                     value = value.strip()
                     details[key] = value
                 else:
-                    if key not in details:
-                        details[key] = line
-                    else:
-                        details[key] += "\n" + line
+                    # If the regex above does not match, the output of the rpcclient queruser call must have
+                    # changed. In this case, this would throw an exception since 'key' would be referenced before
+                    # assignment. We catch that exception.
+                    try:
+                        if key not in details:
+                            details[key] = line
+                        else:
+                            details[key] += "\n" + line
+                    except:
+                        return Result(None, f"Could not parse result of 'rpcclient' command, please open a GitHub issue")
 
             if "acb_info" in details and valid_hex(details["acb_info"]):
                 for key in ACB_DICT:
