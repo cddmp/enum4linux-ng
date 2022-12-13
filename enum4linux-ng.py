@@ -516,8 +516,8 @@ class SambaTool():
             self.exec += ['-s', f'{target.samba_config.get_path()}']
 
         # This enables debugging output (level 1) for the Samba client tools. The problem is that the
-        # tools often throw misleading error codes like NT_STATUS_CONNECTION_DISCONNECTED. Often this 
-        # error is associated with SMB dialect incompatibilities between client and server. But this 
+        # tools often throw misleading error codes like NT_STATUS_CONNECTION_DISCONNECTED. Often this
+        # error is associated with SMB dialect incompatibilities between client and server. But this
         # error also occurs on other occasions. In order to find out the real reason we need to fetch
         # earlier errors which this debugging level will provide.
         #self.exec += ['-d1']
@@ -981,7 +981,7 @@ class EnumSmb():
 
         # Does the target only support one dialect? Then this must be also the preferred dialect.
         preferred_dialect = None
-        if sum(1 for value in supported.values() if value == True) == 1:
+        if sum(1 for value in supported.values() if value is True) == 1:
             if last_supported_dialect == SMB_DIALECT:
                 output["SMB1 only"] = True
                 self.target.smb1_only = True
@@ -1312,16 +1312,16 @@ class EnumSmbDomainInfo():
         # mean that the 'NetBIOS domain name' is the same as the machine's workgroup. Therefore, we set the domain
         # to the 'NetBIOS computer name' which will enforce local authentication.
 
-        if (smb_domain_info["NetBIOS computer name"] and 
-                smb_domain_info["NetBIOS domain name"] and 
+        if (smb_domain_info["NetBIOS computer name"] and
+                smb_domain_info["NetBIOS domain name"] and
                 smb_domain_info["DNS domain"] and
-                smb_domain_info["FQDN"] and 
-                smb_domain_info["DNS domain"] in smb_domain_info["FQDN"] and 
+                smb_domain_info["FQDN"] and
+                smb_domain_info["DNS domain"] in smb_domain_info["FQDN"] and
                 '.' in smb_domain_info["FQDN"]):
 
             smb_domain_info["Derived domain"] = smb_domain_info["NetBIOS domain name"]
             smb_domain_info["Derived membership"] = "domain member"
- 
+
             if not self.creds.local_auth:
                 self.creds.set_domain(smb_domain_info["NetBIOS domain name"])
         elif (smb_domain_info["NetBIOS domain name"] and
