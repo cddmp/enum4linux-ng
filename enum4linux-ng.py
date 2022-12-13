@@ -1851,7 +1851,6 @@ class EnumUsersRpc():
         match = re.search("([^\n]*User Name.*logon_hrs[^\n]*)", result.retmsg, re.DOTALL)
         if match:
             user_info = match.group(1)
-            user_info = user_info.replace("\t", "")
 
             regexMatch = r'^\t[A-Za-z][A-Za-z\s_\.0-9]*(:|\[[0-9\.]+\]\.\.\.)(\t|\s)?'
 
