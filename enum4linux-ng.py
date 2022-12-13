@@ -1853,16 +1853,25 @@ class EnumUsersRpc():
             user_info = match.group(1)
             user_info = user_info.replace("\t", "")
 
+            regexMatch = r'^\t[A-Za-z][A-Za-z\s_\.0-9]*(:|\[[0-9\.]+\]\.\.\.)(\t|\s)?'
+
             for line in filter(None, user_info.split('\n')):
-                if ':' in line:
-                    (key, value) = line.split(":", 1)
-                    key = key.rstrip()
-                    # Skip user and full name, we have this information already
+                if re.match(regexMatch, line):
+                    if ":" in line:
+                        key, value = line.split(":", 1)
+                    if "..." in line:
+                        key, value = line.split("...", 1)
+
                     if "User Name" in key or "Full Name" in key:
                         continue
+                    key = key.strip()
+                    value = value.strip()
                     details[key] = value
                 else:
-                    details[line] = ""
+                    if key not in details:
+                        details[key] = line
+                    else:
+                        details[key] += "\n" + line
 
             if "acb_info" in details and valid_hex(details["acb_info"]):
                 for key in ACB_DICT:
