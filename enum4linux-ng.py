@@ -2077,8 +2077,9 @@ class RidCycleParams:
     "groups", "machines" and/or a domain sid. By default enumerated_input is an empty dict
     and will be filled up during the tool run.
     '''
-    def __init__(self, rid_ranges, known_usernames):
+    def __init__(self, rid_ranges, batch_size, known_usernames):
         self.rid_ranges = rid_ranges
+        self.batch_size = batch_size
         self.known_usernames = known_usernames
         self.enumerated_input = {}
 
@@ -2127,7 +2128,7 @@ class RidCycling():
         # Run...
         for sid in sids_list:
             print_info(f"Trying SID {sid}")
-            rid_cycler = self.rid_cycle(sid, self.cycle_params.rid_ranges)
+            rid_cycler = self.rid_cycle(sid, self.cycle_params.rid_ranges, self.cycle_params.batch_size)
             for result in rid_cycler:
                 # We need the top level key to find out whether we got users, groups, machines or the domain_sid...
                 top_level_key = list(result.retval.keys())[0]
@@ -2216,41 +2217,45 @@ class RidCycling():
             return Result(sids, f"Found {len(sids)} SID(s)")
         return Result(None, "Could not get any SIDs")
 
-    def rid_cycle(self, sid, rid_ranges):
+    def rid_cycle(self, sid, rid_ranges, batch_size):
         '''
         Takes a SID as first parameter well as list of RID ranges (as tuples) as second parameter and does RID cycling.
         '''
         for rid_range in rid_ranges:
             (start_rid, end_rid) = rid_range
 
-            for rid in range(start_rid, end_rid+1):
+            for rid_base in range(start_rid, end_rid+1, batch_size):
+                target_sids = " ".join(list(map(lambda x: f'{sid}-{x}', range(rid_base, rid_base+batch_size))))
                 #FIXME: Could we get rid of error_filter=False?
-                result = SambaRpcclient(['lookupsids', f'{sid}-{rid}'], self.target, self.creds).run(log='RID Cycling', error_filter=False)
+                result = SambaRpcclient(['lookupsids', target_sids], self.target, self.creds).run(log='RID Cycling', error_filter=False)
 
-                # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
-                match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", result.retmsg)
-                if match:
-                    sid_and_user = match.group(1)
-                    entry = match.group(2)
+                split_result = result.retmsg.splitlines()
+                for line in range(len(split_result)):
+                    # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
+                    match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", split_result[line])
+                    if match:
+                        sid_and_user = match.group(1)
+                        entry = match.group(2)
+                        rid = rid_base + line
 
-                    # Samba servers sometimes claim to have user accounts
-                    # with the same name as the UID/RID. We don't report these.
-                    if re.search(r"-(\d+) .*\\\1 \(", sid_and_user):
-                        continue
+                        # Samba servers sometimes claim to have user accounts
+                        # with the same name as the UID/RID. We don't report these.
+                        if re.search(r"-(\d+) .*\\\1 \(", sid_and_user):
+                            continue
 
-                    # "(1)" = User, "(2)" = Domain Group,"(3)" = Domain SID,"(4)" = Local Group
-                    # "(5)" = Well-known group, "(6)" = Deleted account, "(7)" = Invalid account
-                    # "(8)" = Unknown, "(9)" = Machine/Computer account
-                    if "(1)" in sid_and_user:
-                        yield Result({"users":{str(rid):{"username":entry}}}, f"Found user '{entry}' (RID {rid})")
-                    elif "(2)" in sid_and_user:
-                        yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group '{entry}' (RID {rid})")
-                    elif "(3)" in sid_and_user:
-                        yield Result({"domain_sid":f"{sid}-{rid}"}, f"Found domain SID {sid}-{rid}")
-                    elif "(4)" in sid_and_user:
-                        yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group '{entry}' (RID {rid})")
-                    elif "(9)" in sid_and_user:
-                        yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
+                        # "(1)" = User, "(2)" = Domain Group,"(3)" = Domain SID,"(4)" = Local Group
+                        # "(5)" = Well-known group, "(6)" = Deleted account, "(7)" = Invalid account
+                        # "(8)" = Unknown, "(9)" = Machine/Computer account
+                        if "(1)" in sid_and_user:
+                            yield Result({"users":{str(rid):{"username":entry}}}, f"Found user '{entry}' (RID {rid})")
+                        elif "(2)" in sid_and_user:
+                            yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group '{entry}' (RID {rid})")
+                        elif "(3)" in sid_and_user:
+                            yield Result({"domain_sid":f"{sid}-{rid}"}, f"Found domain SID {sid}-{rid}")
+                        elif "(4)" in sid_and_user:
+                            yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group '{entry}' (RID {rid})")
+                        elif "(9)" in sid_and_user:
+                            yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
 
 ### Shares Enumeration
 
@@ -2770,7 +2775,7 @@ class Enumerator():
         # RID Cycling - init parameters
         if self.args.R:
             rid_ranges = self.prepare_rid_ranges()
-            self.cycle_params = RidCycleParams(rid_ranges, self.args.users)
+            self.cycle_params = RidCycleParams(rid_ranges, self.args.R, self.args.users)
 
         # Shares Brute Force - init parameters
         if self.args.shares_file:
@@ -2784,6 +2789,7 @@ class Enumerator():
         print_info(f"Timeout .......... {self.target.timeout} second(s)")
         if self.args.R:
             print_info(f"RID Range(s) ..... {self.args.ranges}")
+            print_info(f"RID Req Size ..... {self.args.R}")
             print_info(f"Known Usernames .. '{self.args.users}'")
 
         # The enumeration starts with a service scan. Currently this scans for
@@ -3210,7 +3216,7 @@ def check_arguments():
     parser.add_argument("-O", action="store_true", help="Get OS information via RPC")
     parser.add_argument("-L", action="store_true", help="Get additional domain info via LDAP/LDAPS (for DCs only)")
     parser.add_argument("-I", action="store_true", help="Get printer information via RPC")
-    parser.add_argument("-R", action="store_true", help="Enumerate users via RID cycling")
+    parser.add_argument("-R", default=0, const=1, nargs='?', type=int, help="Enumerate users via RID cycling. Optionally, specifies lookup request size.")
     parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output")
     parser.add_argument("-w", dest="domain", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")

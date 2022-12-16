@@ -29,6 +29,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 ## Differences
 Some things are implemented differently compared to the original enum4linux. These are the important differences:
 - RID cycling is not part of the default enumeration (```-A```) but can be enabled with ```-R```
+- RID cycling can be achieved faster, by grouping multiple SID lookups in the same rpcclient call
 - parameter naming is slightly different (e.g. ```-A``` instead of ```-a```)
 
 ## Credits
@@ -97,7 +98,7 @@ options:
   -O                 Get OS information via RPC
   -L                 Get additional domain info via LDAP/LDAPS (for DCs only)
   -I                 Get printer information via RPC
-  -R                 Enumerate users via RID cycling
+  -R                 Enumerate users via RID cycling. Optionally, specifies lookup request size.
   -N                 Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output
   -w DOMAIN          Specify workgroup/domain manually (usually found automatically)
   -u USER            Specify username to use (default "")
