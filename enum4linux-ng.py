@@ -2232,13 +2232,13 @@ class RidCycling():
                 result = SambaRpcclient(['lookupsids', target_sids], self.target, self.creds).run(log='RID Cycling', error_filter=False)
 
                 split_result = result.retmsg.splitlines()
-                for line in range(len(split_result)):
+                for rid_offset, line in enumerate(split_result):
                     # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
-                    match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", split_result[line])
+                    match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", line)
                     if match:
                         sid_and_user = match.group(1)
                         entry = match.group(2)
-                        rid = rid_base + line
+                        rid = rid_base + rid_offset
 
                         # Samba servers sometimes claim to have user accounts
                         # with the same name as the UID/RID. We don't report these.
