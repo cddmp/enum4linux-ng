@@ -2077,10 +2077,13 @@ class RidCycleParams:
     "groups", "machines" and/or a domain sid. By default enumerated_input is an empty dict
     and will be filled up during the tool run.
     '''
-    def __init__(self, rid_ranges, batch_size, known_usernames):
+    def __init__(self, rid_ranges, batch_size, known_usernames, usernames_file, force_sid_enum, user_size):
         self.rid_ranges = rid_ranges
         self.batch_size = batch_size
         self.known_usernames = known_usernames
+        self.usernames_file = usernames_file
+        self.force_sid_enum = force_sid_enum
+        self.user_size = user_size
         self.enumerated_input = {}
 
     def set_enumerated_input(self, enum_input):
@@ -2115,12 +2118,19 @@ class RidCycling():
             sids_list = [output["domain_sid"]]
         else:
             print_info("Trying to enumerate SIDs")
-            sids = self.enum_sids(self.cycle_params.known_usernames)
-            if sids.retval is None:
-                output = process_error(sids.retmsg, ["users", "groups", "machines"], module_name, output)
-                return output
-            print_success(sids.retmsg)
-            sids_list = sids.retval
+            for i in range(0, len(self.cycle_params.known_usernames, self.cycle_params.user_size)):
+                sids = self.enum_sids(self.cycle_params.known_usernames[i:i+self.cycle_params.user_size])
+                if sids.retval is None:
+                    output = process_error(sids.retmsg, ["users", "groups", "machines"], module_name, output)
+                    return output
+                print_success(sids.retmsg)
+                sids_list = sids.retval
+
+        # Run usernames bruteforcing if usernames_file is provided
+        if self.cycle_params.usernames_file:
+            with open(self.cycle_params.usernames_file) as f:
+                
+                sids = self.enum_sids(self...)
 
         # Keep track of what we found...
         found_count = {"users": 0, "groups": 0, "machines": 0}
@@ -2775,7 +2785,7 @@ class Enumerator():
         # RID Cycling - init parameters
         if self.args.R:
             rid_ranges = self.prepare_rid_ranges()
-            self.cycle_params = RidCycleParams(rid_ranges, self.args.R, self.args.users)
+            self.cycle_params = RidCycleParams(rid_ranges, self.args.R, self.args.users, self.args.usernames_file, self.args.force_sid_num, self.args.kR)
 
         # Shares Brute Force - init parameters
         if self.args.shares_file:
@@ -2791,6 +2801,8 @@ class Enumerator():
             print_info(f"RID Range(s) ..... {self.args.ranges}")
             print_info(f"RID Req Size ..... {self.args.R}")
             print_info(f"Known Usernames .. '{self.args.users}'")
+            if self.args.usernames_file:
+                print_info(f"Usernames File ... '{self.args.usernames_file}'")
 
         # The enumeration starts with a service scan. Currently this scans for
         # SMB and LDAP, simple TCP connect scan is used for that. From the result
@@ -3044,6 +3056,15 @@ def valid_shares_file(shares_file):
         return Result(False, f"Shares with illegal characters found in {shares_file}:\n{NL.join(fault_shares)}")
     return Result(True, "")
 
+def valid_usernames_file(usernames_file):
+    result = valid_file(usernames_file)
+    if not result.retval:
+        return result
+    # Want to keep it simple for now, plus usr lists can be quite big
+    # Might be heavy to read it two times, one for the check and one while RID Cycling
+    # Could be better to sanitize users before submitting to rpcclient
+    return Result(True, "")
+
 def valid_share(share):
     if re.search(r"^[a-zA-Z0-9\._\$-]+$", share):
         return True
@@ -3227,6 +3248,12 @@ def check_arguments():
     parser.add_argument("--local-auth", action="store_true", default=False, help="Authenticate locally to target")
     parser.add_argument("-d", action="store_true", help="Get detailed information for users and groups, applies to -U, -G and -R")
     parser.add_argument("-k", dest="users", default=KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {KNOWN_USERNAMES}).\nUsed to get sid with "lookupsids"')
+    parser.add_argument("-kF", dest="usernames_file", type=str, help="""
+            File containing users to look for on remote system.\n
+            Used to get users and SIDs with \"lookupnames\".\n
+            Notice that if -kF is used, users lookup is done even if Domain SID is found beforehand.""")
+    parser.add_argument("-kR", default=1, type=int, help="Defines lookupnames and lookupsids request size, namely how many names are grouped in the same request.")
+    parser.add_argument("--force-sid-enum", dest="force_sid_enum", action="store_true", help="Forces SID enumeration to run even if Domain SID is found.")
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for shares")
     parser.add_argument("-t", dest="timeout", default=TIMEOUT, help=f"Sets connection timeout in seconds (default: {TIMEOUT}s)")
@@ -3269,6 +3296,12 @@ def check_arguments():
     # Check shares file
     if args.shares_file:
         result = valid_shares_file(args.shares_file)
+        if not result.retval:
+            raise RuntimeError(result.retmsg)
+
+    # Check usernames file
+    if args.usernames_file:
+        result = valid_usernames_file(args.usernames_file)
         if not result.retval:
             raise RuntimeError(result.retmsg)
 
