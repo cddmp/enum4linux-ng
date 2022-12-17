@@ -200,6 +200,9 @@ OS_VERSIONS = {
 
 # Source: https://docs.microsoft.com/de-de/windows/release-health/release-information
 OS_RELEASE = {
+        "19045": "22H2",
+        "19044": "21H2",
+        "19043": "21H1",
         "19042": "20H2",
         "19041": "2004",
         "18363": "1909",
@@ -312,7 +315,7 @@ RID_RANGES = "500-550,1000-1050"
 KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
 TIMEOUT = 5
 
-# GLOBAL_VERBOSE, GLOBAL_COLORS, GLOBAL_SAMBA_LEGACY should be the only variables which should be written to
+GLOBAL_VERSION = '1.3.0-dev'
 GLOBAL_VERBOSE = False
 GLOBAL_COLORS = True
 GLOBAL_SAMBA_LEGACY = False
@@ -378,7 +381,6 @@ class Target:
         self.smb_ports = []
         self.ldap_ports = []
         self.listeners = []
-        self.services = []
         self.smb_preferred_dialect = None
         self.smb1_supported = False
         self.smb1_only = False
@@ -3105,7 +3107,7 @@ def valid_file(file, mode=os.R_OK):
 ### Print Functions and Error Processing
 
 def print_banner():
-    print(f"{Colors.green('ENUM4LINUX - next generation')}\n")
+    print(f"{Colors.green(f'ENUM4LINUX - next generation (v{GLOBAL_VERSION})')}")
 
 def print_heading(text, leading_newline=True):
     output = f"|    {text}    |"
