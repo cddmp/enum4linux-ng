@@ -381,7 +381,6 @@ class Target:
         self.smb_ports = []
         self.ldap_ports = []
         self.listeners = []
-        self.services = []
         self.smb_preferred_dialect = None
         self.smb1_supported = False
         self.smb1_only = False
