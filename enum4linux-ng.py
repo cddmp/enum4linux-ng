@@ -315,7 +315,7 @@ RID_RANGES = "500-550,1000-1050"
 KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
 TIMEOUT = 5
 
-GLOBAL_VERSION = '1.3.0-dev'
+GLOBAL_VERSION = '1.3.0'
 GLOBAL_VERBOSE = False
 GLOBAL_COLORS = True
 GLOBAL_SAMBA_LEGACY = False
