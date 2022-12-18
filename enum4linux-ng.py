@@ -3086,7 +3086,7 @@ def valid_file(file, mode=os.R_OK):
 ### Print Functions and Error Processing
 
 def print_banner():
-    print(f"{Colors.green(f'ENUM4LINUX - next generation (v{GLOBAL_VERSION})')}")
+    print(f"{Colors.green(f'ENUM4LINUX - next generation (v{GLOBAL_VERSION})')}\n")
 
 def print_heading(text, leading_newline=True):
     output = f"|    {text}    |"
