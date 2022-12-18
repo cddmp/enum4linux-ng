@@ -1,3 +1,4 @@
 impacket>=0.9.21
 ldap3
 PyYAML>=5.1
+alive_progress>=2.4
