@@ -2130,7 +2130,7 @@ class RidCycling():
         # Run...
         for sid in sids_list:
             print_info(f"Trying SID {sid}")
-            rid_cycler = self.rid_cycle(sid, self.cycle_params.rid_ranges, self.cycle_params.batch_size)
+            rid_cycler = self.rid_cycle(sid)
             for result in rid_cycler:
                 # We need the top level key to find out whether we got users, groups, machines or the domain_sid...
                 top_level_key = list(result.retval.keys())[0]
@@ -2219,20 +2219,19 @@ class RidCycling():
             return Result(sids, f"Found {len(sids)} SID(s)")
         return Result(None, "Could not get any SIDs")
 
-    def rid_cycle(self, sid, rid_ranges, batch_size):
+    def rid_cycle(self, sid):
         '''
         Takes a SID as first parameter well as list of RID ranges (as tuples) as second parameter and does RID cycling.
         '''
-        for rid_range in rid_ranges:
+        for rid_range in self.cycle_params.rid_ranges:
             (start_rid, end_rid) = rid_range
 
-            for rid_base in range(start_rid, end_rid+1, batch_size):
-                target_sids = " ".join(list(map(lambda x: f'{sid}-{x}', range(rid_base, rid_base+batch_size))))
+            for rid_base in range(start_rid, end_rid+1, self.cycle_params.batch_size):
+                target_sids = " ".join(list(map(lambda x: f'{sid}-{x}', range(rid_base, min(end_rid+1, rid_base+self.cycle_params.batch_size)))))
                 #FIXME: Could we get rid of error_filter=False?
                 result = SambaRpcclient(['lookupsids', target_sids], self.target, self.creds).run(log='RID Cycling', error_filter=False)
 
-                split_result = result.retmsg.splitlines()
-                for rid_offset, line in enumerate(split_result):
+                for rid_offset, line in enumerate(result.retmsg.splitlines()):
                     # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
                     match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", line)
                     if match:
@@ -3002,10 +3001,11 @@ class Enumerator():
 
 ### Validation Functions
 
-def valid_timeout(timeout):
+def valid_value(value, bounds):
+    min_val, max_val = bounds
     try:
-        timeout = int(timeout)
-        if 1 <= timeout <= 600:
+        value = int(value)
+        if min_val <= value <= max_val:
             return True
     except ValueError:
         pass
@@ -3218,7 +3218,7 @@ def check_arguments():
     parser.add_argument("-O", action="store_true", help="Get OS information via RPC")
     parser.add_argument("-L", action="store_true", help="Get additional domain info via LDAP/LDAPS (for DCs only)")
     parser.add_argument("-I", action="store_true", help="Get printer information via RPC")
-    parser.add_argument("-R", default=0, const=1, nargs='?', type=int, help="Enumerate users via RID cycling. Optionally, specifies lookup request size.")
+    parser.add_argument("-R", default=0, const=1, nargs='?', metavar="BULK_SIZE", type=int, help="Enumerate users via RID cycling. Optionally, specifies lookup request size.")
     parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output")
     parser.add_argument("-w", dest="domain", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
@@ -3264,9 +3264,12 @@ def check_arguments():
         if not valid_domain(args.domain):
             raise RuntimeError(f"Workgroup/domain '{args.domain}' contains illegal character")
 
-    # Check for RID ranges
-    if not valid_rid_ranges(args.ranges):
-        raise RuntimeError("The given RID ranges should be a range '10-20' or just a single RID like '1199'")
+    # Check for RID parameter
+    if args.R:
+        if not valid_value(args.R, (1,2000)):
+            raise RuntimeError("The given RID bulk size must be a valid integer in the range 1-2000")
+        if not valid_rid_ranges(args.ranges):
+            raise RuntimeError("The given RID ranges should be a range '10-20' or just a single RID like '1199'")
 
     # Check shares file
     if args.shares_file:
@@ -3279,7 +3282,7 @@ def check_arguments():
         args.users += f",{args.user}"
 
     # Check timeout
-    if not valid_timeout(args.timeout):
+    if not valid_value(args.timeout, (1,600)):
         raise RuntimeError("Timeout must be a valid integer in the range 1-600")
     args.timeout = int(args.timeout)
 
