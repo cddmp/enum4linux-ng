@@ -97,6 +97,8 @@ from impacket.smbconnection import SMB_DIALECT, SMB2_DIALECT_002, SMB2_DIALECT_2
 from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
+from alive_progress import alive_bar
+from math import ceil
 import yaml
 try:
     from yaml import CDumper as Dumper
@@ -314,6 +316,7 @@ DEPS = ["nmblookup", "net", "rpcclient", "smbclient"]
 RID_RANGES = "500-550,1000-1050"
 KNOWN_USERNAMES = "administrator,guest,krbtgt,domain admins,root,bin,none"
 TIMEOUT = 5
+BATCH_SIZE = 10
 
 GLOBAL_VERSION = '1.3.0-dev'
 GLOBAL_VERBOSE = False
@@ -1694,10 +1697,12 @@ class EnumOsInfo():
 ### Users Enumeration via RPC
 
 class EnumUsersRpc():
-    def __init__(self, target, creds, detailed):
+    def __init__(self, target, creds, detailed, batch_size, usernames_file):
         self.target = target
         self.creds = creds
         self.detailed = detailed
+        self.batch_size = batch_size
+        self.usernames_file = usernames_file
 
     def run(self):
         '''
@@ -1728,12 +1733,45 @@ class EnumUsersRpc():
             users_edu_output = users_edu.retval
 
         # Merge both users dicts
-        if users_qdi_output is not None and users_edu_output is not None:
-            users = {**users_edu_output, **users_qdi_output}
-        elif users_edu_output is None:
-            users = users_qdi_output
-        else:
-            users = users_edu_output
+        users = merge_dicts(users_edu_output, users_qdi_output)
+
+        # Run usernames bruteforcing if usernames_file is provided
+        if self.usernames_file:
+            print_info("Enumerating users via 'lookupnames'")
+            with open(self.usernames_file) as f:
+                for file_lines, _ in enumerate(f):
+                    pass
+                f.seek(0)
+                #with alive_bar(ceil(file_lines/self.batch_size)) as bar:
+                with alive_bar(file_lines+1) as bar:
+                    pos = 0
+                    line_buff = []
+                    users_ln_output = dict()
+                    # Iterates over given wordlist
+                    for line in f:
+                        bar()
+                        line_buff.append(line.strip())
+                        pos += 1
+                        # Batch buffer filled 
+                        if pos % self.batch_size <= 0:
+                            #bar()
+                            users_ln = self.enum_from_lookupnames(line_buff)
+                            if users_ln.retval is None:
+                                output = process_error(users_ln.retmsg, ["users"], module_name, output)
+                            else:
+                                users_ln_output = merge_dicts(users_ln.retval, users_ln_output)
+                            pos = 0
+                            line_buff.clear()
+                    #bar()
+            if line_buff:
+                users_ln = self.enum_from_lookupnames(line_buff)
+                if users_ln.retval is None:
+                    output = process_error(users_ln.retmsg, ["users"], module_name, output)
+                else:
+                    users_ln_output = merge_dicts(users_ln.retval, users_ln_output)
+            print_success(f"Found {len(users_ln_output.keys())} user(s) via 'lookupnames'")
+            # Merge user dicts
+            users = merge_dicts(users, users_ln_output)
 
         if users:
             if self.detailed:
@@ -1784,7 +1822,7 @@ class EnumUsersRpc():
 
     def enum_from_querydispinfo(self):
         '''
-        Takes the result of rpclient's querydispinfo and tries to extract the users from it.
+        Takes the result of rpcclient's querydispinfo and tries to extract the users from it.
         '''
         users = {}
         querydispinfo = self.querydispinfo()
@@ -1810,7 +1848,7 @@ class EnumUsersRpc():
 
     def enum_from_enumdomusers(self):
         '''
-        Takes the result of rpclient's enumdomusers and tries to extract the users from it.
+        Takes the result of rpcclient's enumdomusers and tries to extract the users from it.
         '''
         users = {}
         enumdomusers = self.enumdomusers()
@@ -1830,6 +1868,29 @@ class EnumUsersRpc():
             else:
                 return Result(None, "Could not extract users from eumdomusers output, please open a GitHub issue")
         return Result(users, f"Found {len(users.keys())} user(s) via 'enumdomusers'")
+
+    def enum_from_lookupnames(self, names):
+        '''
+        Takes a list of names, feeds them to rpcclient's lookupnames and tries to extract users from it.
+        '''
+        users = dict()
+        name_rid_pattern = r"(.+)\s+S-\d+-\d+-(?:\d+-)*(\d+)\s+.*"
+        grbg = ["NT_STATUS_ACCESS_DENIED", "NT_STATUS_NONE_MAPPED", "UNKNOWN"]
+        result = SambaRpcclient(['lookupnames', " ".join(names)], self.target, self.creds).run(log=f'Attempting to get SID for users {", ".join(names)}', error_filter=False)
+        # Iterates over valid results only
+        for user in filter(lambda resp: all(g not in resp for g in grbg), result.retmsg.splitlines()):
+            match = re.search(name_rid_pattern, user.strip())
+            if match:
+                rid = match.group(2)
+                # Reports collision if found
+                if users.get(rid):
+                    print_error(f"Collision found on key {rid}.\nDiscarding \"{users[rid]}\" for \"{match.group(1)}\"")
+                # Saves RID -> Username
+                users[rid] = {"username": match.group(1)}
+            else:
+                print_error(f"Error in response parsing: {user}")
+                return Result(None, "Could not extract users from lookupnames output, please open a GitHub issue")
+        return Result(users, f"Found {len(users.keys())} user(s) via 'lookupnames'")
 
     def get_details_from_rid(self, rid, name):
         '''
@@ -2079,13 +2140,12 @@ class RidCycleParams:
     "groups", "machines" and/or a domain sid. By default enumerated_input is an empty dict
     and will be filled up during the tool run.
     '''
-    def __init__(self, rid_ranges, batch_size, known_usernames, usernames_file, force_sid_enum, user_size):
+    def __init__(self, rid_ranges, batch_size, known_usernames, force_sid_enum):
         self.rid_ranges = rid_ranges
+        self.rid_count = sum(map(lambda r: batch_size * ceil((r[1]+1-r[0])/batch_size), rid_ranges)) 
         self.batch_size = batch_size
-        self.known_usernames = known_usernames
-        self.usernames_file = usernames_file
+        self.known_usernames = known_usernames.split(',')
         self.force_sid_enum = force_sid_enum
-        self.user_size = user_size
         self.enumerated_input = {}
 
     def set_enumerated_input(self, enum_input):
@@ -2115,24 +2175,25 @@ class RidCycling():
         print_heading(f"Users, Groups and Machines on {self.target.host} via RID Cycling")
         output = self.cycle_params.enumerated_input
 
+        # Expands known_usernames with found users from previous modules
+        if output.get('users'):
+            map(lambda found_usr: self.cycle_params.known_usernames.append(found_usr), 
+                [usr_obj['username'] for _, usr_obj in output['users'].items()])
+
+        sids_list = []
         # Try to enumerate SIDs first, if we don't have the domain SID already
         if output["domain_sid"]:
             sids_list = [output["domain_sid"]]
-        else:
+
+        if not sids_list or self.cycle_params.force_sid_enum:
             print_info("Trying to enumerate SIDs")
-            for i in range(0, len(self.cycle_params.known_usernames, self.cycle_params.user_size)):
-                sids = self.enum_sids(self.cycle_params.known_usernames[i:i+self.cycle_params.user_size])
+            for i in range(0, len(self.cycle_params.known_usernames), self.cycle_params.batch_size):
+                sids = self.enum_sids(self.cycle_params.known_usernames[i:i+self.cycle_params.batch_size])
                 if sids.retval is None:
                     output = process_error(sids.retmsg, ["users", "groups", "machines"], module_name, output)
                     return output
                 print_success(sids.retmsg)
                 sids_list = sids.retval
-
-        # Run usernames bruteforcing if usernames_file is provided
-        if self.cycle_params.usernames_file:
-            with open(self.cycle_params.usernames_file) as f:
-                
-                sids = self.enum_sids(self...)
 
         # Keep track of what we found...
         found_count = {"users": 0, "groups": 0, "machines": 0}
@@ -2157,6 +2218,7 @@ class RidCycling():
 
                 # If we have the RID already, we continue...
                 if output[top_level_key] is not None and rid in output[top_level_key]:
+                    print_error(f"Duplicate ({result.retmsg})")
                     continue
 
                 print_success(result.retmsg)
@@ -2171,7 +2233,7 @@ class RidCycling():
                     if "users" in top_level_key:
                         rid, entry = list(result.retval["users"].items())[0]
                         name = entry["username"]
-                        details = EnumUsersRpc(self.target, self.creds, False).get_details_from_rid(rid, name)
+                        details = EnumUsersRpc(self.target, self.creds, False, 1, "").get_details_from_rid(rid, name)
                     elif "groups" in top_level_key:
                         rid, entry = list(result.retval["groups"].items())[0]
                         groupname = entry["groupname"]
@@ -2196,34 +2258,26 @@ class RidCycling():
         Tries to enumerate SIDs by looking up user names via rpcclient's lookupnames and by using rpcclient's lsaneumsid.
         '''
         sids = []
-        sid_patterns_list = [r"(S-1-5-21-[\d-]+)-\d+", r"(S-1-5-[\d-]+)-\d+", r"(S-1-22-[\d-]+)-\d+"]
+        #sid_patterns_list = [r"(S-1-5-21-[\d-]+)-\d+", r"(S-1-5-[\d-]+)-\d+", r"(S-1-22-[\d-]+)-\d+"]
+        sid_pattern = r"(S-\d+-\d+(?:-\d+)*)-\d+"
 
-        # Try to get a valid SID from well-known user names
-        for known_username in users.split(','):
-            result = SambaRpcclient(['lookupnames', f'{known_username}'], self.target, self.creds).run(log=f'Attempting to get SID for user {known_username}', error_filter=False)
-            sid_string = result.retmsg
-
-            #FIXME: Should we use nt_status_error_filter here? (mind error_filter above)
-            if "NT_STATUS_ACCESS_DENIED" in sid_string or "NT_STATUS_NONE_MAPPED" in sid_string:
-                continue
-
-            for pattern in sid_patterns_list:
-                match = re.search(pattern, sid_string)
-                if match:
-                    result = match.group(1)
-                    if result not in sids:
-                        sids.append(result)
+        # Try to get a valid SID from well-known user names.
+        result = SambaRpcclient(['lookupnames', " ".join(users)], self.target, self.creds).run(log=f'Attempting to get SID for users {", ".join(users)}', error_filter=False)
+        #FIXME: Should we use nt_status_error_filter here? (mind error_filter above)
+        for sid in filter(lambda resp: "NT_STATUS_ACCESS_DENIED" not in resp and "NT_STATUS_NONE_MAPPED" not in resp, result.retmsg.splitlines()):
+            match = re.search(sid_pattern, sid)
+            if match and match.group(1) not in sids:
+                sids.append(match.group(1))
 
         # Try to get SID list via lsaenumsid
         result = SambaRpcclient(['lsaenumsid'], self.target, self.creds).run(log="Attempting to get SIDs via 'lsaenumsid'", error_filter=False)
 
         #FIXME: Should we use nt_status_error_filter here? (mind error_filter above)
         if "NT_STATUS_ACCESS_DENIED" not in result.retmsg:
-            for pattern in sid_patterns_list:
-                match_list = re.findall(pattern, result.retmsg)
-                for match in match_list:
-                    if match not in sids:
-                        sids.append(match)
+            match_list = re.findall(sid_pattern, result.retmsg)
+            for match in match_list:
+                if match not in sids:
+                    sids.append(match)
 
         if sids:
             return Result(sids, f"Found {len(sids)} SID(s)")
@@ -2233,41 +2287,43 @@ class RidCycling():
         '''
         Takes a SID as first parameter well as list of RID ranges (as tuples) as second parameter and does RID cycling.
         '''
-        for rid_range in rid_ranges:
-            (start_rid, end_rid) = rid_range
+        with alive_bar(self.cycle_params.rid_count) as bar:
+            for rid_range in rid_ranges:
+                (start_rid, end_rid) = rid_range
 
-            for rid_base in range(start_rid, end_rid+1, batch_size):
-                target_sids = " ".join(list(map(lambda x: f'{sid}-{x}', range(rid_base, rid_base+batch_size))))
-                #FIXME: Could we get rid of error_filter=False?
-                result = SambaRpcclient(['lookupsids', target_sids], self.target, self.creds).run(log='RID Cycling', error_filter=False)
+                for rid_base in range(start_rid, end_rid+1, batch_size):
+                    target_sids = " ".join(list(map(lambda x: f'{sid}-{x}', range(rid_base, rid_base+batch_size))))
+                    #FIXME: Could we get rid of error_filter=False?
+                    result = SambaRpcclient(['lookupsids', target_sids], self.target, self.creds).run(log='RID Cycling', error_filter=False)
 
-                split_result = result.retmsg.splitlines()
-                for line in range(len(split_result)):
-                    # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
-                    match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", split_result[line])
-                    if match:
-                        sid_and_user = match.group(1)
-                        entry = match.group(2)
-                        rid = rid_base + line
+                    split_result = result.retmsg.splitlines()
+                    for line in range(len(split_result)):
+                        bar()
+                        # Example: S-1-5-80-3139157870-2983391045-3678747466-658725712-1004 *unknown*\*unknown* (8)
+                        match = re.search(r"(S-\d+-\d+-\d+-[\d-]+\s+(.*)\s+[^\)]+\))", split_result[line])
+                        if match:
+                            sid_and_user = match.group(1)
+                            entry = match.group(2)
+                            rid = rid_base + line
 
-                        # Samba servers sometimes claim to have user accounts
-                        # with the same name as the UID/RID. We don't report these.
-                        if re.search(r"-(\d+) .*\\\1 \(", sid_and_user):
-                            continue
+                            # Samba servers sometimes claim to have user accounts
+                            # with the same name as the UID/RID. We don't report these.
+                            if re.search(r"-(\d+) .*\\\1 \(", sid_and_user):
+                                continue
 
-                        # "(1)" = User, "(2)" = Domain Group,"(3)" = Domain SID,"(4)" = Local Group
-                        # "(5)" = Well-known group, "(6)" = Deleted account, "(7)" = Invalid account
-                        # "(8)" = Unknown, "(9)" = Machine/Computer account
-                        if "(1)" in sid_and_user:
-                            yield Result({"users":{str(rid):{"username":entry}}}, f"Found user '{entry}' (RID {rid})")
-                        elif "(2)" in sid_and_user:
-                            yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group '{entry}' (RID {rid})")
-                        elif "(3)" in sid_and_user:
-                            yield Result({"domain_sid":f"{sid}-{rid}"}, f"Found domain SID {sid}-{rid}")
-                        elif "(4)" in sid_and_user:
-                            yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group '{entry}' (RID {rid})")
-                        elif "(9)" in sid_and_user:
-                            yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
+                            # "(1)" = User, "(2)" = Domain Group,"(3)" = Domain SID,"(4)" = Local Group
+                            # "(5)" = Well-known group, "(6)" = Deleted account, "(7)" = Invalid account
+                            # "(8)" = Unknown, "(9)" = Machine/Computer account
+                            if "(1)" in sid_and_user:
+                                yield Result({"users":{str(rid):{"username":entry}}}, f"Found user '{entry}' (RID {rid})")
+                            elif "(2)" in sid_and_user:
+                                yield Result({"groups":{str(rid):{"groupname":entry, "type":"domain"}}}, f"Found domain group '{entry}' (RID {rid})")
+                            elif "(3)" in sid_and_user:
+                                yield Result({"domain_sid":f"{sid}-{rid}"}, f"Found domain SID {sid}-{rid}")
+                            elif "(4)" in sid_and_user:
+                                yield Result({"groups":{str(rid):{"groupname":entry, "type":"builtin"}}}, f"Found builtin group '{entry}' (RID {rid})")
+                            elif "(9)" in sid_and_user:
+                                yield Result({"machines":{str(rid):{"machine":entry}}}, f"Found machine '{entry}' (RID {rid})")
 
 ### Shares Enumeration
 
@@ -2787,7 +2843,7 @@ class Enumerator():
         # RID Cycling - init parameters
         if self.args.R:
             rid_ranges = self.prepare_rid_ranges()
-            self.cycle_params = RidCycleParams(rid_ranges, self.args.R, self.args.users, self.args.usernames_file, self.args.force_sid_num, self.args.kR)
+            self.cycle_params = RidCycleParams(rid_ranges, self.args.batch_size, self.args.users, self.args.force_sid_enum)
 
         # Shares Brute Force - init parameters
         if self.args.shares_file:
@@ -2799,12 +2855,12 @@ class Enumerator():
         print_info(f"Random Username .. '{self.creds.random_user}'")
         print_info(f"Password ......... '{self.creds.pw}'")
         print_info(f"Timeout .......... {self.target.timeout} second(s)")
+        print_info(f"Batch Size ....... {self.args.batch_size}")
         if self.args.R:
             print_info(f"RID Range(s) ..... {self.args.ranges}")
-            print_info(f"RID Req Size ..... {self.args.R}")
             print_info(f"Known Usernames .. '{self.args.users}'")
-            if self.args.usernames_file:
-                print_info(f"Usernames File ... '{self.args.usernames_file}'")
+        if self.args.usernames_file:
+            print_info(f"Usernames File ... '{self.args.usernames_file}'")
 
         # The enumeration starts with a service scan. Currently this scans for
         # SMB and LDAP, simple TCP connect scan is used for that. From the result
@@ -2917,7 +2973,7 @@ class Enumerator():
 
         # Enum users
         if ENUM_USERS_RPC in modules:
-            result = EnumUsersRpc(self.target, self.creds, self.args.d).run()
+            result = EnumUsersRpc(self.target, self.creds, self.args.d, self.args.batch_size, self.args.usernames_file).run()
             self.output.update(result)
 
         # Enum groups
@@ -3176,6 +3232,20 @@ def process_impacket_smb_exception(exception, target):
         return f"SMB connection error on port {target.port}/tcp: {nt_status_error}"
     return f"SMB connection error on port {target.port}/tcp: session failed"
 
+def merge_dicts(d1, d2):
+    '''
+    Merges dictionaries, reporting if any collision happens.
+    '''
+    if d1 is not None and d2 is not None:
+        for com in set(d1.keys()).intersection(set(d2.keys())):
+            if d1[com] != d2[com]:
+                print_error(f"Collision found merging dicts on key {com}.\nDiscarding \"{d1[com]}\" for \"{d2[com]}\"")
+        return {**d1, **d2}
+    elif d1 is None:
+        return d2
+    else:
+        return d1
+
 def nt_status_error_filter(msg):
     for error in NT_STATUS_COMMON_ERRORS:
         if error.lower() in msg.lower():
@@ -3239,7 +3309,7 @@ def check_arguments():
     parser.add_argument("-O", action="store_true", help="Get OS information via RPC")
     parser.add_argument("-L", action="store_true", help="Get additional domain info via LDAP/LDAPS (for DCs only)")
     parser.add_argument("-I", action="store_true", help="Get printer information via RPC")
-    parser.add_argument("-R", default=0, const=1, nargs='?', type=int, help="Enumerate users via RID cycling. Optionally, specifies lookup request size.")
+    parser.add_argument("-R", action="store_true", help="Enumerate users via RID cycling.")
     parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output")
     parser.add_argument("-w", dest="domain", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
@@ -3250,11 +3320,10 @@ def check_arguments():
     parser.add_argument("--local-auth", action="store_true", default=False, help="Authenticate locally to target")
     parser.add_argument("-d", action="store_true", help="Get detailed information for users and groups, applies to -U, -G and -R")
     parser.add_argument("-k", dest="users", default=KNOWN_USERNAMES, type=str, help=f'User(s) that exists on remote system (default: {KNOWN_USERNAMES}).\nUsed to get sid with "lookupsids"')
-    parser.add_argument("-kF", dest="usernames_file", type=str, help="""
+    parser.add_argument("-kf", dest="usernames_file", type=str, help="""
             File containing users to look for on remote system.\n
-            Used to get users and SIDs with \"lookupnames\".\n
-            Notice that if -kF is used, users lookup is done even if Domain SID is found beforehand.""")
-    parser.add_argument("-kR", default=1, type=int, help="Defines lookupnames and lookupsids request size, namely how many names are grouped in the same request.")
+            Used to get users and SIDs with \"lookupnames\".\n""")
+    parser.add_argument("-bs", dest="batch_size", type=int, default=BATCH_SIZE, help=f"Defines batch request size. Default: {BATCH_SIZE}")
     parser.add_argument("--force-sid-enum", dest="force_sid_enum", action="store_true", help="Forces SID enumeration to run even if Domain SID is found.")
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for shares")
