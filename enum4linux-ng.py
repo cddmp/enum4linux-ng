@@ -1743,7 +1743,7 @@ class EnumUsersRpc():
                     pass
                 f.seek(0)
                 #with alive_bar(ceil(file_lines/self.batch_size)) as bar:
-                with alive_bar(file_lines+1) as bar:
+                with alive_bar(file_lines+1, enrich_print=False, theme='classic') as bar:
                     pos = 0
                     line_buff = []
                     users_ln_output = dict()
@@ -2287,7 +2287,7 @@ class RidCycling():
         '''
         Takes a SID as first parameter well as list of RID ranges (as tuples) as second parameter and does RID cycling.
         '''
-        with alive_bar(self.cycle_params.rid_count) as bar:
+        with alive_bar(self.cycle_params.rid_count, enrich_print=False, theme='classic') as bar:
             for rid_range in rid_ranges:
                 (start_rid, end_rid) = rid_range
 
