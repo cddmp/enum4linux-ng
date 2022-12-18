@@ -70,17 +70,18 @@ This time the ```-A``` and ```-C``` option are used. While the first one behaves
 
 ### Usage
 ```
-ENUM4LINUX - next generation
-
-usage: enum4linux-ng.py [-h] [-A] [-As] [-U] [-G] [-Gm] [-S] [-C] [-P] [-O] [-L] [-I] [-R] [-N] [-w DOMAIN] [-u USER] [-p PW | -K TICKET_FILE | -H NTHASH] [--local-auth] [-d] [-k USERS] [-r RANGES] [-s SHARES_FILE] [-t TIMEOUT]
-                        [-v] [--keep] [-oJ OUT_JSON_FILE | -oY OUT_YAML_FILE | -oA OUT_FILE]
+usage: enum4linux-ng.py [-h] [-A] [-As] [-U] [-G] [-Gm] [-S] [-C] [-P] [-O] [-L] [-I] [-R [BULK_SIZE]] [-N] [-w DOMAIN] [-u USER]
+                        [-p PW | -K TICKET_FILE | -H NTHASH] [--local-auth] [-d] [-k USERS] [-r RANGES] [-s SHARES_FILE] [-t TIMEOUT] [-v] [--keep]
+                        [-oJ OUT_JSON_FILE | -oY OUT_YAML_FILE | -oA OUT_FILE]
                         host
 
-This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems. It is mainly a wrapper around the Samba tools nmblookup, net, rpcclient and smbclient. Other than the original
-tool it allows to export enumeration results as YAML or JSON file, so that it can be further processed with other tools. The tool tries to do a 'smart' enumeration. It first checks whether SMB or LDAP is accessible on the target.
-Depending on the result of this check, it will dynamically skip checks (e.g. LDAP checks if LDAP is not running). If SMB is accessible, it will always check whether a session can be set up or not. If no session can be set up, the
-tool will stop enumeration. The enumeration process can be interupted with CTRL+C. If the options -oJ or -oY are provided, the tool will write out the current enumeration state to the JSON or YAML file, once it receives SIGINT
-triggered by CTRL+C. The tool was made for security professionals and CTF players. Illegal use is prohibited.
+This tool is a rewrite of Mark Lowe's enum4linux.pl, a tool for enumerating information from Windows and Samba systems. It is mainly a wrapper around the Samba
+tools nmblookup, net, rpcclient and smbclient. Other than the original tool it allows to export enumeration results as YAML or JSON file, so that it can be
+further processed with other tools. The tool tries to do a 'smart' enumeration. It first checks whether SMB or LDAP is accessible on the target. Depending on the
+result of this check, it will dynamically skip checks (e.g. LDAP checks if LDAP is not running). If SMB is accessible, it will always check whether a session can
+be set up or not. If no session can be set up, the tool will stop enumeration. The enumeration process can be interupted with CTRL+C. If the options -oJ or -oY
+are provided, the tool will write out the current enumeration state to the JSON or YAML file, once it receives SIGINT triggered by CTRL+C. The tool was made for
+security professionals and CTF players. Illegal use is prohibited.
 
 positional arguments:
   host
@@ -98,7 +99,7 @@ options:
   -O                 Get OS information via RPC
   -L                 Get additional domain info via LDAP/LDAPS (for DCs only)
   -I                 Get printer information via RPC
-  -R                 Enumerate users via RID cycling. Optionally, specifies lookup request size.
+  -R [BULK_SIZE]     Enumerate users via RID cycling. Optionally, specifies lookup request size.
   -N                 Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output
   -w DOMAIN          Specify workgroup/domain manually (usually found automatically)
   -u USER            Specify username to use (default "")
