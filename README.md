@@ -108,7 +108,9 @@ options:
   -H NTHASH          Try to authenticate with hash
   --local-auth       Authenticate locally to target
   -d                 Get detailed information for users and groups, applies to -U, -G and -R
-  -k USERS           User(s) that exists on remote system (default: administrator,guest,krbtgt,domain admins,root,bin,none). Used to get sid with "lookupsids"
+  -k USERS           User(s) that exists on remote system (default: administrator,guest,krbtgt,domain admins,root,bin,none). Used to get SIDs with "lookupsids"
+  -kf USERS_FILE     File containing users to look for on remote system. Used to get users and SIDs with "lookupnames"
+  -bs BULK_SIZE      Defines bulk request size (default: 10)
   -r RANGES          RID ranges to enumerate (default: 500-550,1000-1050)
   -s SHARES_FILE     Brute force guessing for shares
   -t TIMEOUT         Sets connection timeout in seconds (default: 5s)
@@ -151,6 +153,7 @@ In addition, you will need the following Python packages:
 - ldap3
 - PyYaml
 - impacket
+- alive_progress
 
 For a faster processing of YAML (optional!) also install (should come as a dependency for PyYaml for most Linux distributions):
 - LibYAML
@@ -162,13 +165,15 @@ For all distribution examples below, LibYAML is already a dependency of the corr
 ##### ArchLinux
 
 ```console
-#  pacman -S smbclient python-ldap3 python-yaml impacket
+# pacman -S smbclient python-ldap3 python-yaml impacket
+# pip install alive_progress
 ```
 ##### Fedora/CentOS/RHEL
 (tested on Fedora Workstation 31)
 
 ```console
 # dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
+# pip install alive_progress
 ```
 
 ##### Kali Linux/Debian/Ubuntu 
@@ -176,6 +181,7 @@ For all distribution examples below, LibYAML is already a dependency of the corr
 
 ```console
 # apt install smbclient python3-ldap3 python3-yaml python3-impacket
+# pip install alive_progress
 ```
 
 #### Linux distribution-agnostic
@@ -183,7 +189,7 @@ For all distribution examples below, LibYAML is already a dependency of the corr
 Depending on the Linux distribution either `pip3` or `pip` is needed:
 
 ```console
-$ pip install pyyaml ldap3 impacket
+$ pip install pyyaml ldap3 impacket alive_progress
 ```
 
 Alternative:

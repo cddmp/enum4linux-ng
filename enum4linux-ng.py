@@ -3331,7 +3331,7 @@ def check_arguments():
     parser.add_argument("-kf", dest="usernames_file", type=str, help="""
             File containing users to look for on remote system.\n
             Used to get users and SIDs with \"lookupnames\".\n""")
-    parser.add_argument("-bs", dest="bulk_size", type=int, default=BULK_SIZE, help=f"Defines bulk request size. Default: {BULK_SIZE}")
+    parser.add_argument("-bs", dest="bulk_size", type=int, default=BULK_SIZE, help=f"Defines bulk request size (default: {BULK_SIZE})")
     parser.add_argument("--force-sid-enum", dest="force_sid_enum", action="store_true", help="Forces SID enumeration to run even if Domain SID is found.")
     parser.add_argument("-r", dest="ranges", default=RID_RANGES, type=str, help=f"RID ranges to enumerate (default: {RID_RANGES})")
     parser.add_argument("-s", dest="shares_file", help="Brute force guessing for shares")
