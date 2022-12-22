@@ -1747,7 +1747,7 @@ class EnumUsersRpc():
                     # Iterates over given wordlist
                     for line in f:
                         line_buff.append(line.strip())
-                        # Batch buffer filled 
+                        # Batch buffer filled
                         if len(line_buff) % self.bulk_size <= 0:
                             bar(len(line_buff))
                             users_ln = self.enum_from_lookupnames(line_buff)
@@ -2137,7 +2137,7 @@ class RidCycleParams:
     '''
     def __init__(self, rid_ranges, bulk_size, known_usernames, force_sid_enum):
         self.rid_ranges = rid_ranges
-        self.rid_count = sum(map(lambda r: (r[1]+1-r[0]), rid_ranges)) 
+        self.rid_count = sum(map(lambda r: (r[1]+1-r[0]), rid_ranges))
         self.bulk_size = bulk_size
         self.known_usernames = known_usernames.split(',')
         self.force_sid_enum = force_sid_enum
@@ -2172,7 +2172,7 @@ class RidCycling():
 
         # Expands known_usernames with found users from previous modules
         if output.get('users'):
-            map(lambda found_usr: self.cycle_params.known_usernames.append(found_usr), 
+            map(lambda found_usr: self.cycle_params.known_usernames.append(found_usr),
                 [usr_obj['username'] for _, usr_obj in output['users'].items()])
 
         sids_list = []
@@ -3229,12 +3229,12 @@ def process_impacket_smb_exception(exception, target):
 
 def merge_dicts(d1, d2, case_sens=False):
     '''
-    Merges dictionaries, reporting if any collision happens. 
+    Merges dictionaries, reporting if any collision happens.
     If `case_sens=True` is passed, dictionaries are treated as case insensitive and strings inside are flattened to lowercase.
     '''
     if not case_sens:
-        d1 = flatten_dict(d1)
-        d2 = flatten_dict(d2)
+        if d1: d1 = flatten_dict(d1)
+        if d2: d2 = flatten_dict(d2)
     if d1 is not None and d2 is not None:
         for com in set(d1.keys()).intersection(set(d2.keys())):
             if d1[com] != d2[com]:
