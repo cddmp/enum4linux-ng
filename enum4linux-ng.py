@@ -2596,12 +2596,15 @@ class EnumPolicy():
         '''
         policy = {}
 
-        smb_conn = SmbConnection(self.target, self.creds)
-        smb_conn.login()
-        samr_object = SAMR(smb_conn)
-        domains = samr_object.get_domains()
-        # FIXME: Gets policy for BULTIN domain
-        domain_handle = samr_object.get_domain_handle(domains[0])
+        try:
+            smb_conn = SmbConnection(self.target, self.creds)
+            smb_conn.login()
+            samr_object = SAMR(smb_conn)
+            domains = samr_object.get_domains()
+            # FIXME: Gets policy for domain only, [1] stores the policy for BUILTIN
+            domain_handle = samr_object.get_domain_handle(domains[0])
+        except Exception as e:
+            return Result(None, process_impacket_smb_exception(e, self.target))
 
         try:
             result = samr_object.get_domain_password_information(domain_handle)
