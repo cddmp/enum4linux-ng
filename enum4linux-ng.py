@@ -2480,6 +2480,7 @@ class EnumShares():
             return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
 
         if "NT_STATUS_INVALID_INFO_CLASS" in result.retmsg\
+                or "NT_STATUS_CONNECTION_REFUSED listing" in result.retmsg\
                 or "NT_STATUS_NETWORK_ACCESS_DENIED" in result.retmsg\
                 or "NT_STATUS_NOT_A_DIRECTORY" in result.retmsg\
                 or "NT_STATUS_NO_SUCH_FILE" in result.retmsg:
