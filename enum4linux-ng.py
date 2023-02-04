@@ -2596,23 +2596,26 @@ class EnumPolicy():
         '''
         policy = {}
 
-        result = self.samr_init()
-        if result.retval[0] is None or result.retval[1] is None:
-            return Result(None, result.retmsg)
-
-        dce, domain_handle = result.retval
-
-        # Password policy
         try:
-            domain_passwd = samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
-            result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_passwd)
+            smb_conn = SmbConnection(self.target, self.creds)
+            smb_conn.login()
+            samr_object = SAMR(smb_conn)
+            domains = samr_object.get_domains()
+            # FIXME: Gets policy for domain only, [1] stores the policy for BUILTIN
+            domain_handle = samr_object.get_domain_handle(domains[0])
+        except Exception as e:
+            return Result(None, process_impacket_smb_exception(e, self.target))
+
+        try:
+            result = samr_object.get_domain_password_information(domain_handle)
+
             policy["Domain password information"] = {}
-            policy["Domain password information"]["Password history length"] = result['Buffer']['Password']['PasswordHistoryLength'] or "None"
-            policy["Domain password information"]["Minimum password length"] = result['Buffer']['Password']['MinPasswordLength'] or "None"
-            policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['Buffer']['Password']['MinPasswordAge']['LowPart']), int(result['Buffer']['Password']['MinPasswordAge']['HighPart']))
-            policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['Buffer']['Password']['MaxPasswordAge']['LowPart']), int(result['Buffer']['Password']['MaxPasswordAge']['HighPart']))
+            policy["Domain password information"]["Password history length"] = result['PasswordHistoryLength'] or "None"
+            policy["Domain password information"]["Minimum password length"] = result['MinPasswordLength'] or "None"
+            policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['MinPasswordAge']['LowPart']), int(result['MinPasswordAge']['HighPart']))
+            policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['MaxPasswordAge']['LowPart']), int(result['MaxPasswordAge']['HighPart']))
             policy["Domain password information"]["Password properties"] = []
-            pw_prop = result['Buffer']['Password']['PasswordProperties']
+            pw_prop = result['PasswordProperties']
             for bitmask in DOMAIN_FIELDS:
                 if pw_prop & bitmask == bitmask:
                     policy["Domain password information"]["Password properties"].append({DOMAIN_FIELDS[bitmask]:True})
@@ -2626,88 +2629,31 @@ class EnumPolicy():
 
         # Domain lockout
         try:
-            domain_lockout = samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
-            result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_lockout)
+            result = samr_object.get_domain_lockout_information(domain_handle)
+
             policy["Domain lockout information"] = {}
-            policy["Domain lockout information"]["Lockout observation window"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutObservationWindow'], lockout=True)
-            policy["Domain lockout information"]["Lockout duration"] = self.policy_to_human(0, result['Buffer']['Lockout']['LockoutDuration'], lockout=True)
-            policy["Domain lockout information"]["Lockout threshold"] = result['Buffer']['Lockout']['LockoutThreshold'] or "None"
+            policy["Domain lockout information"]["Lockout observation window"] = self.policy_to_human(0, result['LockoutObservationWindow'], lockout=True)
+            policy["Domain lockout information"]["Lockout duration"] = self.policy_to_human(0, result['LockoutDuration'], lockout=True)
+            policy["Domain lockout information"]["Lockout threshold"] = result['LockoutThreshold'] or "None"
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
-                return Result(None, f"Could not get domain_lockout policy: {nt_status_error}")
+                return Result(None, f"Could not get domain lockout policy: {nt_status_error}")
             return Result(None, "Could not get domain lockout policy")
 
         # Domain logoff
         try:
-            domain_logoff = samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation
-            result = samr.hSamrQueryInformationDomain2(dce, domainHandle=domain_handle, domainInformationClass=domain_logoff)
+            result = samr_object.get_domain_logoff_information(domain_handle)
+
             policy["Domain logoff information"] = {}
-            policy["Domain logoff information"]["Force logoff time"] = self.policy_to_human(result['Buffer']['Logoff']['ForceLogoff']['LowPart'], result['Buffer']['Logoff']['ForceLogoff']['HighPart'])
+            policy["Domain logoff information"]["Force logoff time"] = self.policy_to_human(result['ForceLogoff']['LowPart'], result['ForceLogoff']['HighPart'])
         except Exception as e:
             nt_status_error = nt_status_error_filter(str(e))
             if nt_status_error:
-                return Result(None, f"Could not get domain_lockout policy: {nt_status_error}")
-            return Result(None, "Could not get domain lockout policy")
+                return Result(None, f"Could not get domain logoff policy: {nt_status_error}")
+            return Result(None, "Could not get domain logoff policy")
 
         return Result(policy, f"Found policy:\n{yamlize(policy)}")
-
-    # This function is heavily based on this polenum fork: https://github.com/Wh1t3Fox/polenum
-    # The original polenum was written by Richard "deanx" Dean: https://labs.portcullis.co.uk/tools/polenum/
-    # All credits to Richard "deanx" Dean and Craig "Wh1t3Fox" West!
-    def samr_init(self):
-        '''
-        Tries to connect to the SAMR named pipe and get the domain handle.
-        '''
-
-        # Take a backup of the environment, in case we modify it for Kerberos
-        env = os.environ.copy()
-        try:
-            smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout)
-            if self.creds.ticket_file:
-                os.environ['KRB5CCNAME'] = self.creds.ticket_file
-                # Currently we let impacket extract user and domain from the ticket
-                smb_conn.kerberosLogin('', self.creds.pw, domain='', useCache=True)
-            elif self.creds.nthash:
-                smb_conn.login(self.creds.user, self.creds.pw, domain=self.creds.domain, nthash=self.creds.nthash)
-            else:
-                smb_conn.login(self.creds.user, self.creds.pw, self.creds.domain)
-
-            rpctransport = transport.SMBTransport(smb_connection=smb_conn, filename=r'\samr', remoteName=self.target.host)
-            dce = DCERPC_v5(rpctransport)
-            dce.connect()
-            dce.bind(samr.MSRPC_UUID_SAMR)
-        except Exception as e:
-            return Result((None, None), process_impacket_smb_exception(e, self.target))
-        finally:
-            # Restore environment in any case
-            os.environ.clear()
-            os.environ.update(env)
-
-        try:
-            resp = samr.hSamrConnect2(dce)
-        except Exception as e:
-            return Result((None, None), process_impacket_smb_exception(e, self.target))
-
-        if resp['ErrorCode'] != 0:
-            return Result((None, None), f"SamrConnect2 call failed on port {self.target.port}/tcp")
-
-        resp2 = samr.hSamrEnumerateDomainsInSamServer(dce, serverHandle=resp['ServerHandle'], enumerationContext=0, preferedMaximumLength=500)
-        if resp2['ErrorCode'] != 0:
-            return Result((None, None), "SamrEnumerateDomainsinSamServer failed")
-
-        resp3 = samr.hSamrLookupDomainInSamServer(dce, serverHandle=resp['ServerHandle'], name=resp2['Buffer']['Buffer'][0]['Name'])
-        if resp3['ErrorCode'] != 0:
-            return Result((None, None), "SamrLookupDomainInSamServer failed")
-
-        resp4 = samr.hSamrOpenDomain(dce, serverHandle=resp['ServerHandle'], desiredAccess=samr.MAXIMUM_ALLOWED, domainId=resp3['DomainId'])
-        if resp4['ErrorCode'] != 0:
-            return Result((None, None), "SamrOpenDomain failed")
-
-        #domains = resp2['Buffer']['Buffer']
-        domain_handle = resp4['DomainHandle']
-
-        return Result((dce, domain_handle), "")
 
     # This function is heavily based on this polenum fork: https://github.com/Wh1t3Fox/polenum
     # The original polenum was written by Richard "deanx" Dean: https://labs.portcullis.co.uk/tools/polenum/
