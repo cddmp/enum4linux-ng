@@ -477,6 +477,136 @@ class Credentials:
     def as_dict(self):
         return {'credentials':OrderedDict({'auth_method':self.auth_method, 'user':self.user, 'password':self.pw, 'domain':self.domain, 'ticket_file':self.ticket_file, 'nthash':self.nthash, 'random_user':self.random_user})}
 
+class SmbConnection():
+    def __init__(self, target, creds=Credentials(), dialect=None):
+        self.target = target
+        self.creds = creds
+        self.dialect = dialect
+        self._conn = None
+
+        self.connect()
+
+    def connect(self):
+        self._conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=self.dialect)
+
+    def login(self):
+        creds = self.creds
+
+        # Take a backup of the environment, in case we modify it for Kerberos
+        env = os.environ.copy()
+        try:
+            if creds.ticket_file:
+                # Currently we let impacket extract user and domain from the ticket
+                os.environ['KRB5CCNAME'] = creds.ticket_file
+                self._conn.kerberosLogin('', creds.pw, domain='', useCache=True)
+            elif creds.nthash:
+                self._conn.login(creds.user, creds.pw, domain=creds.domain, nthash=creds.nthash)
+            else:
+                self._conn.login(creds.user, creds.pw, creds.domain)
+        except Exception as e:
+            #FIXME: Might need adjustment
+            return Result((None, None), process_impacket_smb_exception(e, self.target))
+        finally:
+            # Restore environment in any case
+            os.environ.clear()
+            os.environ.update(env)
+
+    def close(self):
+        self._conn.close()
+
+    def get_dialect(self):
+        return self._conn.getDialect()
+
+    def is_signing_required(self):
+        return self._conn.isSigningRequired()
+
+    def get_raw(self):
+        return self._conn
+
+    def get_server_lanman(self):
+        return self._conn.getSMBServer().get_server_lanman()
+
+    def get_server_os(self):
+        return self._conn.getSMBServer().get_server_os()
+
+    def get_server_os_major(self):
+        return self._conn.getServerOSMajor()
+
+    def get_server_os_minor(self):
+        return self._conn.getServerOSMinor()
+
+    def get_server_os_build(self):
+        return self._conn.getServerOSBuild()
+
+    def get_server_domain(self):
+        return self._conn.getServerDomain()
+
+    def get_server_name(self):
+        return self._conn.getServerName()
+
+    def get_server_dns_hostname(self):
+        return self._conn.getServerDNSHostName()
+
+    def get_server_dns_domainname(self):
+        return self._conn.getServerDNSDomainName()
+
+class DceRpc():
+    def __init__(self, smb_conn):
+        self._smb_conn = smb_conn
+        self.dce = None
+        self.filename = None
+        self.msrpc_uuid = None
+
+        if isinstance(self, SAMR):
+            self.filename = r'\samr'
+            self.msrpc_uuid = samr.MSRPC_UUID_SAMR
+
+        self._connect()
+
+    def _connect(self):
+        rpctransport = transport.SMBTransport(smb_connection=self._smb_conn.get_raw(), filename=self.filename, remoteName=self._smb_conn.target.host)
+        self.dce = DCERPC_v5(rpctransport)
+        self.dce.connect()
+        self.dce.bind(self.msrpc_uuid)
+
+class SAMR(DceRpc):
+    def __init__(self, smb_conn=None):
+        super().__init__(smb_conn)
+
+        self._server_handle = self._get_server_handle()
+
+    def _get_server_handle(self):
+        resp = samr.hSamrConnect(self.dce)
+        return resp['ServerHandle']
+
+    def get_domains(self):
+        resp = samr.hSamrEnumerateDomainsInSamServer(self.dce, self._server_handle)
+        domains = resp['Buffer']['Buffer']
+        domain_names = []
+        for domain in domains:
+            domain_names.append(domain['Name'])
+        return domain_names
+
+    def get_domain_handle(self, domain_name):
+        resp = samr.hSamrLookupDomainInSamServer(self.dce, self._server_handle, domain_name)
+        resp = samr.hSamrOpenDomain(self.dce, serverHandle = self._server_handle, domainId = resp['DomainId'])
+        return resp['DomainHandle']
+
+    def get_domain_password_information(self, domain_handle):
+        resp = samr.hSamrQueryInformationDomain2(self.dce, domainHandle=domain_handle, domainInformationClass=samr.DOMAIN_INFORMATION_CLASS.DomainPasswordInformation)
+        return resp['Buffer']['Password']
+
+    def get_domain_lockout_information(self, domain_handle):
+        resp = samr.hSamrQueryInformationDomain2(self.dce, domainHandle=domain_handle, domainInformationClass=samr.DOMAIN_INFORMATION_CLASS.DomainLockoutInformation)
+        return resp['Buffer']['Lockout']
+
+    def get_domain_logoff_information(self, domain_handle):
+        resp = samr.hSamrQueryInformationDomain2(self.dce, domainHandle=domain_handle, domainInformationClass=samr.DOMAIN_INFORMATION_CLASS.DomainLogoffInformation)
+        return resp['Buffer']['Logoff']
+
+    def query_display_information(self, domain_handle):
+        resp = samr.hSamrQueryDisplayInformation(self.dce, domainHandle=domain_handle)
+        return resp['Buffer']['UserInformation']['Buffer']
 
 class SambaTool():
     '''
@@ -971,7 +1101,7 @@ class EnumSmb():
         last_supported_dialect = None
         for dialect in smb_dialects:
             try:
-                smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=dialect)
+                smb_conn = SmbConnection(self.target, dialect=dialect)
                 smb_conn.close()
                 supported[SMB_DIALECTS[dialect]] = True
                 last_supported_dialect = dialect
@@ -990,10 +1120,10 @@ class EnumSmb():
             preferred_dialect = last_supported_dialect
 
         try:
-            smb_conn = smbconnection.SMBConnection(self.target.host, self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=preferred_dialect)
-            preferred_dialect = smb_conn.getDialect()
+            smb_conn = SmbConnection(self.target, dialect=preferred_dialect)
+            preferred_dialect = smb_conn.get_dialect()
             # Check whether SMB signing is required or optional - since this seems to be a global setting, we check it only for the preferred dialect
-            output["SMB signing required"] = smb_conn.isSigningRequired()
+            output["SMB signing required"] = smb_conn.is_signing_required()
             smb_conn.close()
 
             output["Preferred dialect"] = SMB_DIALECTS[preferred_dialect]
@@ -1286,8 +1416,8 @@ class EnumSmbDomainInfo():
 
         smb_conn = None
         try:
-            smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=self.target.smb_preferred_dialect)
-            smb_conn.login("", "", "")
+            smb_conn = SmbConnection(self.target, Credentials(), dialect=self.target.smb_preferred_dialect)
+            smb_conn.login()
         except Exception as e:
             error_msg = process_impacket_smb_exception(e, self.target)
             # STATUS_ACCESS_DENIED is the only error we can safely ignore. It basically tells us that a
@@ -1298,10 +1428,10 @@ class EnumSmbDomainInfo():
         # For SMBv1 we can typically find Domain in the "Session Setup AndX Response" packet.
         # For SMBv2 and later we find additional information like the DNS name and the DNS FQDN.
         try:
-            smb_domain_info["NetBIOS domain name"] = smb_conn.getServerDomain()
-            smb_domain_info["NetBIOS computer name"] = smb_conn.getServerName()
-            smb_domain_info["FQDN"] = smb_conn.getServerDNSHostName().rstrip('\x00')
-            smb_domain_info["DNS domain"] = smb_conn.getServerDNSDomainName().rstrip('\x00')
+            smb_domain_info["NetBIOS domain name"] = smb_conn.get_server_domain()
+            smb_domain_info["NetBIOS computer name"] = smb_conn.get_server_name()
+            smb_domain_info["FQDN"] = smb_conn.get_server_dns_hostname().rstrip('\x00')
+            smb_domain_info["DNS domain"] = smb_conn.get_server_dns_domainname().rstrip('\x00')
         except:
             pass
 
@@ -1591,8 +1721,8 @@ class EnumOsInfo():
         if self.target.smb1_supported:
             smb_conn = None
             try:
-                smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=SMB_DIALECT)
-                smb_conn.login("", "", "")
+                smb_conn = SmbConnection(self.target, dialect=SMB_DIALECT)
+                smb_conn.login()
             except Exception as e:
                 error_msg = process_impacket_smb_exception(e, self.target)
                 if not "STATUS_ACCESS_DENIED" in error_msg:
@@ -1603,11 +1733,11 @@ class EnumOsInfo():
                 os_info["OS release"] = "not supported"
 
             try:
-                native_lanman = smb_conn.getSMBServer().get_server_lanman()
+                native_lanman = smb_conn.get_server_lanman()
                 if native_lanman:
                     os_info["Native LAN manager"] = f"{native_lanman}"
 
-                native_os = smb_conn.getSMBServer().get_server_os()
+                native_os = smb_conn.get_server_os()
                 if native_os:
                     os_info["Native OS"] = f"{native_os}"
                     match = re.search(r"Windows ([0-9])\.([0-9])", native_os)
@@ -1623,8 +1753,8 @@ class EnumOsInfo():
         if not self.target.smb1_only:
             smb_conn = None
             try:
-                smb_conn = smbconnection.SMBConnection(remoteName=self.target.host, remoteHost=self.target.host, sess_port=self.target.port, timeout=self.target.timeout, preferredDialect=self.target.smb_preferred_dialect)
-                smb_conn.login("", "", "")
+                smb_conn = SmbConnection(self.target, dialect=self.target.smb_preferred_dialect)
+                smb_conn.login()
             except Exception as e:
                 error_msg = process_impacket_smb_exception(e, self.target)
                 if not "STATUS_ACCESS_DENIED" in error_msg:
@@ -1635,13 +1765,13 @@ class EnumOsInfo():
                 os_info["Native OS"] = "not supported"
 
             try:
-                os_major = smb_conn.getServerOSMajor()
-                os_minor = smb_conn.getServerOSMinor()
+                os_major = smb_conn.get_server_os_major()
+                os_minor = smb_conn.get_server_os_minor()
             except:
                 pass
 
             try:
-                os_build = smb_conn.getServerOSBuild()
+                os_build = smb_conn.get_server_os_build()
                 if os_build is not None:
                     os_info["OS build"] = f"{os_build}"
                     if str(os_build) in OS_RELEASE:
@@ -2350,6 +2480,7 @@ class EnumShares():
             return Result({"mapping":"denied", "listing":"n/a"}, "Mapping: DENIED, Listing: N/A")
 
         if "NT_STATUS_INVALID_INFO_CLASS" in result.retmsg\
+                or "NT_STATUS_CONNECTION_REFUSED listing" in result.retmsg\
                 or "NT_STATUS_NETWORK_ACCESS_DENIED" in result.retmsg\
                 or "NT_STATUS_NOT_A_DIRECTORY" in result.retmsg\
                 or "NT_STATUS_NO_SUCH_FILE" in result.retmsg:
