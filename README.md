@@ -172,7 +172,7 @@ For all distribution examples below, LibYAML is already a dependency of the corr
 # dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
 ```
 
-##### Kali Linux/Debian/Ubuntu 
+##### Kali Linux/Debian/Ubuntu/Linux Mint
 (tested on Kali Linux 2020.1, recent Debian (e.g. Buster) or Ubuntu versions should work, for Ubuntu 18.04 or below use the Docker or Python virtual environment variant)
 
 ```console
