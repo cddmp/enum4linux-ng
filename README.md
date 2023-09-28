@@ -213,7 +213,8 @@ Remember you need to still install the samba tools as mentioned above. In additi
 ##### Docker
 ```console
 $ git clone https://github.com/cddmp/enum4linux-ng
-$ docker build enum4linux-ng --tag enum4linux-ng
+$ cd enum4linux-ng
+$ docker build . --tag enum4linux-ng
 ```
 Once finished an example run could look like this:
 ```console
