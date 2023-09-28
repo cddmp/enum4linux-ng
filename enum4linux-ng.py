@@ -98,6 +98,8 @@ from impacket.dcerpc.v5.rpcrt import DCERPC_v5
 from impacket.dcerpc.v5 import transport, samr
 from ldap3 import Server, Connection, DSA
 import yaml
+from enum import Enum
+
 try:
     from yaml import CDumper as Dumper
 except ImportError:
@@ -320,35 +322,15 @@ GLOBAL_VERBOSE = False
 GLOBAL_COLORS = True
 GLOBAL_SAMBA_LEGACY = False
 
-class Colors:
-    ansi_reset = '\033[0m'
-    ansi_red = '\033[91m'
-    ansi_green = '\033[92m'
-    ansi_yellow = '\033[93m'
-    ansi_blue = '\033[94m'
+class Colors(Enum):
+    red = '\033[91m'
+    green = '\033[92m'
+    yellow = '\033[93m'
+    blue = '\033[94m'
 
-    @classmethod
-    def red(cls, msg):
+    def __call__(self, message):
         if GLOBAL_COLORS:
-            return f"{cls.ansi_red}{msg}{cls.ansi_reset}"
-        return msg
-
-    @classmethod
-    def green(cls, msg):
-        if GLOBAL_COLORS:
-            return f"{cls.ansi_green}{msg}{cls.ansi_reset}"
-        return msg
-
-    @classmethod
-    def yellow(cls, msg):
-        if GLOBAL_COLORS:
-            return f"{cls.ansi_yellow}{msg}{cls.ansi_reset}"
-        return msg
-
-    @classmethod
-    def blue(cls, msg):
-        if GLOBAL_COLORS:
-            return f"{cls.ansi_blue}{msg}{cls.ansi_reset}"
+            return f"{self.value}{message}\033[0m"
         return msg
 
 class Result:
@@ -3163,7 +3145,7 @@ def valid_file(file, mode=os.R_OK):
 ### Print Functions and Error Processing
 
 def print_banner():
-    print(f"{Colors.green(f'ENUM4LINUX - next generation (v{GLOBAL_VERSION})')}\n")
+    print(Colors.green(f'ENUM4LINUX - next generation (v{GLOBAL_VERSION})'), end="\n\n")
 
 def print_heading(text, leading_newline=True):
     output = f"|    {text}    |"
