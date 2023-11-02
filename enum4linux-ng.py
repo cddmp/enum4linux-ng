@@ -2449,6 +2449,9 @@ class EnumShares():
 
         result = SambaSmbclient(['dir', f'{share}'], self.target, self.creds).run(log=f'Attempting to map share //{self.target.host}/{share}', error_filter=False)
 
+        if not result.retval:
+            return Result(None, f"Could not check share: {result.retmsg}")
+
         if "NT_STATUS_BAD_NETWORK_NAME" in result.retmsg:
             return Result(None, "Share doesn't exist")
 
@@ -2473,6 +2476,9 @@ class EnumShares():
 
         if "NT_STATUS_INVALID_PARAMETER" in result.retmsg:
             return Result(None, "Could not check share: STATUS_INVALID_PARAMETER")
+
+        if "NT_STATUS_IO_TIMEOUT" in result.retmsg:
+            return Result(None, "Could not check share: STATUS_IO_TIMEOUT")
 
         if re.search(r"\n\s+\.\.\s+D.*\d{4}\n", result.retmsg) or re.search(r".*blocks\sof\ssize.*blocks\savailable.*", result.retmsg):
             return Result({"mapping":"ok", "listing":"ok"}, "Mapping: OK, Listing: OK")
