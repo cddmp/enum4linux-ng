@@ -126,10 +126,15 @@ There are multiple ways to install the tool. Either the tool comes as a package 
 ### Automatic Installation
 I'm aware of the following Linux distributions which package the tool:
 
+#### Kali Linux
+```console
+# apt install enum4linux-ng 
+```
+
 #### Archstrike
 
 ```console
-$ pacman -S enum4linux-ng
+# pacman -S enum4linux-ng
 ```
 
 #### NixOS
@@ -172,8 +177,8 @@ For all distribution examples below, LibYAML is already a dependency of the corr
 # dnf install samba-common-tools samba-client python3-ldap3 python3-pyyaml python3-impacket
 ```
 
-##### Kali Linux/Debian/Ubuntu/Linux Mint
-(tested on Kali Linux 2020.1, recent Debian (e.g. Buster) or Ubuntu versions should work, for Ubuntu 18.04 or below use the Docker or Python virtual environment variant)
+##### Debian/Ubuntu/Linux Mint
+(For Ubuntu 18.04 or below use the Docker or Python virtual environment variant)
 
 ```console
 # apt install smbclient python3-ldap3 python3-yaml python3-impacket
