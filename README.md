@@ -3,11 +3,7 @@
 <strong>A next generation version of enum4linux</strong>
 </p>
 <p align="center">
-<img src="https://img.shields.io/badge/python-3.6-blue.svg"/>
-<img src="https://img.shields.io/badge/python-3.7-blue.svg"/>
-<img src="https://img.shields.io/badge/python-3.8-blue.svg"/>
-<img src="https://img.shields.io/badge/python-3.9-blue.svg"/>
-<img src="https://img.shields.io/badge/python-3.10-blue.svg"/>
+<img src="https://img.shields.io/badge/python-%3E=_3.6-blue"/>
 <img src="https://img.shields.io/badge/License-GPLv3-green.svg"/>
 </p>
 
