@@ -350,7 +350,7 @@ class Target:
     passed during the enumeration to the various modules. This allows to modify/update target information
     during enumeration.
     '''
-    def __init__(self, host, credentials, port=None, tls=None, timeout=None, samba_config=None, sessions={}):
+    def __init__(self, host, credentials, port=None, tls=None, timeout=None, samba_config=None, sessions={'sessions_possible':False}):
         self.host = host
         self.creds = credentials
         self.port = port
@@ -2954,7 +2954,7 @@ class Enumerator():
 
         # If sessions are not possible, we regenerate the list of modules again.
         # This will only leave those modules in, which don't require authentication.
-        if self.target.sessions and not self.target.sessions[self.creds.auth_method]:
+        if self.target.sessions and self.creds.auth_method in self.target.sessions and not self.target.sessions[self.creds.auth_method]:
             modules = self.get_modules(self.target.listeners, session=False)
 
         # Try to get domain name and sid via lsaquery
