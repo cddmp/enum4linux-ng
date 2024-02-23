@@ -350,14 +350,13 @@ class Target:
     passed during the enumeration to the various modules. This allows to modify/update target information
     during enumeration.
     '''
-    def __init__(self, host, credentials, port=None, tls=None, timeout=None, samba_config=None, sessions={}):
+    def __init__(self, host, credentials, port=None, tls=None, timeout=None, samba_config=None):
         self.host = host
         self.creds = credentials
         self.port = port
         self.timeout = timeout
         self.tls = tls
         self.samba_config = samba_config
-        self.sessions = sessions
 
         self.ip_version = None
         self.smb_ports = []
@@ -366,6 +365,14 @@ class Target:
         self.smb_preferred_dialect = None
         self.smb1_supported = False
         self.smb1_only = False
+
+        self.sessions = {"sessions_possible":False,
+            AUTH_NULL:False,
+            AUTH_PASSWORD:False,
+            AUTH_KERBEROS:False,
+            AUTH_NTHASH:False,
+            "random_user":False,
+        }
 
         result = self.valid_host(host)
         if not result.retval:
@@ -2950,11 +2957,12 @@ class Enumerator():
         if ENUM_SESSIONS in modules:
             result = EnumSessions(self.target, self.creds).run()
             self.output.update(result)
+            # Overwrite sessions
             self.target.sessions = self.output.as_dict()['sessions']
 
         # If sessions are not possible, we regenerate the list of modules again.
         # This will only leave those modules in, which don't require authentication.
-        if self.target.sessions and not self.target.sessions[self.creds.auth_method]:
+        if not self.target.sessions[self.creds.auth_method]:
             modules = self.get_modules(self.target.listeners, session=False)
 
         # Try to get domain name and sid via lsaquery
