@@ -81,7 +81,7 @@
 
 from argparse import ArgumentParser
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 import random
@@ -2678,9 +2678,10 @@ class EnumPolicy():
             tmp = abs(high) * (1e-7)
 
         try:
-            minutes = datetime.utcfromtimestamp(tmp).minute
-            hours = datetime.utcfromtimestamp(tmp).hour
-            time_diff = datetime.utcfromtimestamp(tmp) - datetime.utcfromtimestamp(0)
+            dt = datetime.fromtimestamp(tmp, tz=timezone.utc)
+            minutes = dt.minute
+            hours = dt.hour
+            time_diff = dt - datetime.fromtimestamp(0, tz=timezone.utc)
             days = time_diff.days
         except:
             return "invalid time"
