@@ -2683,6 +2683,7 @@ class EnumPolicy():
             hours = dt.hour
             time_diff = dt - datetime.fromtimestamp(0, tz=timezone.utc)
             days = time_diff.days
+            years = dt.year - 1970
         except:
             return "invalid time"
 
@@ -2690,6 +2691,10 @@ class EnumPolicy():
             time += f"{days} days "
         elif days == 1:
             time += f"{days} day "
+        if years == 1:
+            time += f"({years} year) "
+        elif years > 1:
+            time += f"({years} years) "
         if hours > 1:
             time += f"{hours} hours "
         elif hours == 1:
@@ -2698,7 +2703,7 @@ class EnumPolicy():
             time += f"{minutes} minutes"
         elif minutes == 1:
             time += f"{minutes} minute"
-        return time
+        return time.rstrip()
 
 ### Printer Enumeration
 
