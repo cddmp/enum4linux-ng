@@ -3305,7 +3305,7 @@ def check_arguments():
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
     auth_methods = parser.add_mutually_exclusive_group()
     auth_methods.add_argument("-p", dest="pw", default='', type=str, help="Specify password to use (default \"\")")
-    auth_methods.add_argument("-K", dest="ticket_file", default='', type=str, help="Try to authenticate with Kerberos, only useful in Active Directory environment")
+    auth_methods.add_argument("-K", dest="ticket_file", default='', type=str, help="Try to authenticate with Kerberos, only useful in Active Directory environment (Note: DNS must be setup correctly for this option to work")
     auth_methods.add_argument("-H", dest="nthash", default='', type=str, help="Try to authenticate with hash")
     parser.add_argument("--local-auth", action="store_true", default=False, help="Authenticate locally to target")
     parser.add_argument("-d", action="store_true", help="Get detailed information for users and groups, applies to -U, -G and -R")
