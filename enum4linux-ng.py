@@ -449,7 +449,7 @@ class Credentials:
         return Result(True, '')
 
     def valid_ticket(self, ticket_file):
-        return valid_file(ticket_file)
+        return valid_file(ticket_file, mode='600')
 
     # Allows various modules to set the domain during enumeration. The domain can only be set once.
     # Currently, we rely on the information gained via unauth smb session to guess the domain.
@@ -3147,18 +3147,21 @@ def valid_domain(domain):
         return True
     return False
 
-def valid_file(file, mode=os.R_OK):
+def valid_file(file, mode=None):
     if not os.path.exists(file):
         return Result(False, f'File {file} does not exist')
 
-    if os.stat(file).st_size == 0:
+    stat = os.stat(file)
+    if stat.st_size == 0:
         return Result(False, f'File {file} is empty')
 
-    if not os.access(file, mode):
-        if mode == os.R_OK:
-            return Result(False, f'Cannot read file {file}')
-        if mode == os.W_OK:
-            return Result(False, f'Cannot write file {file}')
+    cur_mode = oct(stat.st_mode)[-3:]
+    if mode and not cur_mode == mode:
+        return Result(False, f'File permissions for {file} are currently set to {cur_mode}, but Samba tools require {mode}')
+
+    if not os.access(file, os.R_OK):
+        return Result(False, f'Cannot read file {file}')
+
 
     return Result(True, '')
 
