@@ -107,7 +107,7 @@ options:
   -w DOMAIN          Specify workgroup/domain manually (usually found automatically)
   -u USER            Specify username to use (default "")
   -p PW              Specify password to use (default "")
-  -K TICKET_FILE     Try to authenticate with Kerberos, only useful in Active Directory environment
+  -K TICKET_FILE     Try to authenticate with Kerberos, only useful in Active Directory environment (Note: DNS must be setup correctly for this option to work)
   -H NTHASH          Try to authenticate with hash
   --local-auth       Authenticate locally to target
   -d                 Get detailed information for users and groups, applies to -U, -G and -R
