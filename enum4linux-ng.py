@@ -3162,7 +3162,6 @@ def valid_file(file, mode=None):
     if not os.access(file, os.R_OK):
         return Result(False, f'Cannot read file {file}')
 
-
     return Result(True, '')
 
 ### Print Functions and Error Processing
