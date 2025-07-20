@@ -229,7 +229,7 @@ SAMBA_CLIENT_ERRORS = [
 # Translates various SMB dialect values to human readable strings
 SMB_DIALECTS = {
         SMB_DIALECT: "SMB 1.0",
-        SMB2_DIALECT_002: "SMB 2.02",
+        SMB2_DIALECT_002: "SMB 2.0.2",
         SMB2_DIALECT_21: "SMB 2.1",
         SMB2_DIALECT_30: "SMB 3.0",
         SMB2_DIALECT_311: "SMB 3.1.1"
