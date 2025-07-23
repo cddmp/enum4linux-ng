@@ -268,11 +268,12 @@ NT_STATUS_COMMON_ERRORS = [
         "STATUS_CONNECTION_DISCONNECTED"
     ]
 
-# Supported authentication methods
+# Supported authentication methods/protocols
 AUTH_PASSWORD = "password"
-AUTH_NTHASH = "nthash"
-AUTH_KERBEROS = "kerberos"
+AUTH_NTLM = "NTLM"
+AUTH_KERBEROS = "Kerberos"
 AUTH_NULL = "null"
+AUTH_GUEST = "guest"
 
 # Mapping from errno to string for socket errors we often come across
 SOCKET_ERRORS = {
@@ -370,8 +371,8 @@ class Target:
             AUTH_NULL:False,
             AUTH_PASSWORD:False,
             AUTH_KERBEROS:False,
-            AUTH_NTHASH:False,
-            "random_user":False,
+            AUTH_NTLM:False,
+            AUTH_GUEST:False,
         }
 
         result = self.valid_host(host)
@@ -432,7 +433,7 @@ class Credentials:
                 raise Exception(result.retmsg)
             if nthash and not user:
                 raise Exception("NT hash given (-H) without any user, please provide a username (-u)")
-            self.auth_method = AUTH_NTHASH
+            self.auth_method = AUTH_NTLM
         elif not user and not pw:
             self.auth_method = AUTH_NULL
         else:
@@ -1134,11 +1135,11 @@ class EnumSmb():
 ### Session Checks
 
 class EnumSessions():
-    SESSION_USER = "user"
-    SESSION_RANDOM = "random user"
+    SESSION_PASSWORD = "password"
+    SESSION_GUEST = "guest"
     SESSION_NULL = "null"
     SESSION_KERBEROS="Kerberos"
-    SESSION_NTHASH="NT hash"
+    SESSION_NTLM="NTLM"
 
     def __init__(self, target, creds):
 
@@ -1156,12 +1157,12 @@ class EnumSessions():
                   AUTH_NULL:False,
                   AUTH_PASSWORD:False,
                   AUTH_KERBEROS:False,
-                  AUTH_NTHASH:False,
-                  "random_user":False,
+                  AUTH_NTLM:False,
+                  AUTH_GUEST:False,
                   }
 
         # Check null session
-        print_info("Check for null session")
+        print_info("Check for anonymous access (null session)")
         null_session = self.check_session(Credentials('', '', self.creds.domain), self.SESSION_NULL)
         if null_session.retval:
             sessions[AUTH_NULL] = True
@@ -1171,37 +1172,39 @@ class EnumSessions():
 
         # Check Kerberos session
         if self.creds.ticket_file:
-            print_info("Check for Kerberos session")
+            print_info("Check for Kerberos authentication")
             kerberos_session = self.check_session(self.creds, self.SESSION_KERBEROS)
             if kerberos_session.retval:
                 sessions[AUTH_KERBEROS] = True
                 print_success(kerberos_session.retmsg)
             else:
                 output = process_error(kerberos_session.retmsg, ["sessions"], module_name, output)
-        # Check NT hash session
+        # Check for NTLM authentication with user-provided NT hash
         elif self.creds.nthash:
-            print_info("Check for NT hash session")
-            nthash_session = self.check_session(self.creds, self.SESSION_NTHASH)
-            if nthash_session.retval:
-                sessions[AUTH_NTHASH] = True
-                print_success(nthash_session.retmsg)
+            print_info("Check for NTLM authentication")
+            ntlm_session = self.check_session(self.creds, self.SESSION_NTLM)
+            if ntlm_session.retval:
+                sessions[AUTH_NTLM] = True
+                print_success(ntlm_session.retmsg)
             else:
-                output = process_error(nthash_session.retmsg, ["sessions"], module_name, output)
-        # Check for user session
+                output = process_error(ntlm_session.retmsg, ["sessions"], module_name, output)
+        # Check for password authentication
         elif self.creds.user:
-            print_info("Check for user session")
-            user_session = self.check_session(self.creds, self.SESSION_USER)
+            print_info("Check for password authentication")
+            user_session = self.check_session(self.creds, self.SESSION_PASSWORD)
             if user_session.retval:
                 sessions[AUTH_PASSWORD] = True
                 print_success(user_session.retmsg)
             else:
                 output = process_error(user_session.retmsg, ["sessions"], module_name, output)
 
-        # Check random user session
-        print_info("Check for random user")
-        user_session = self.check_session(Credentials(self.creds.random_user, self.creds.pw, self.creds.domain), self.SESSION_RANDOM)
+        # Check for guest access via non-existing (i.e. random) user
+        # https://sensepost.com/blog/2024/guest-vs-null-session-on-windows/
+        # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html#MAPTOGUEST
+        print_info("Check for guest access")
+        user_session = self.check_session(Credentials(self.creds.random_user, self.creds.pw, self.creds.domain), self.SESSION_GUEST)
         if user_session.retval:
-            sessions["random_user"] = True
+            sessions[AUTH_GUEST] = True
             print_success(user_session.retmsg)
             print_hint(f"Rerunning enumeration with user '{self.creds.random_user}' might give more results")
         else:
@@ -1210,8 +1213,8 @@ class EnumSessions():
         if sessions[AUTH_NULL] or \
             sessions[AUTH_PASSWORD] or \
             sessions[AUTH_KERBEROS] or \
-            sessions[AUTH_NTHASH] or \
-            sessions["random_user"]:
+            sessions[AUTH_NTLM] or \
+            sessions[AUTH_GUEST]:
             sessions["sessions_possible"] = True
         else:
             process_error("Sessions failed, neither null nor user sessions were possible", ["sessions"], module_name, output)
@@ -1246,10 +1249,10 @@ class EnumSessions():
 
         if "case_sensitive" in result.retmsg:
             if session_type == self.SESSION_KERBEROS:
-                return Result(True, f"Server allows Kerberos session using '{creds.ticket_file}'")
-            if session_type == self.SESSION_NTHASH:
-                return Result(True, f"Server allows NT hash session using '{creds.nthash}'")
-            return Result(True, f"Server allows session using username '{creds.user}', password '{creds.pw}'")
+                return Result(True, f"Server allows Kerberos authentication using ticket '{creds.ticket_file}'")
+            if session_type == self.SESSION_NTLM:
+                return Result(True, f"Server allows NTLM authentication using hash '{creds.nthash}'")
+            return Result(True, f"Server allows authentication via username '{creds.user}' and password '{creds.pw}'")
         return Result(False, f"Could not establish session using '{creds.user}', password '{creds.pw}'")
 
 ### Domain Information Enumeration via LDAP
