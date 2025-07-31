@@ -2610,7 +2610,7 @@ class EnumPolicy():
             policy["Domain password information"] = {}
             policy["Domain password information"]["Password history length"] = result['PasswordHistoryLength'] or "None"
             policy["Domain password information"]["Minimum password length"] = result['MinPasswordLength'] or "None"
-            policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['MinPasswordAge']['LowPart']), int(result['MinPasswordAge']['HighPart']))
+            policy["Domain password information"]["Minimum password age"] = self.policy_to_human(int(result['MinPasswordAge']['LowPart']), int(result['MinPasswordAge']['HighPart']))
             policy["Domain password information"]["Maximum password age"] = self.policy_to_human(int(result['MaxPasswordAge']['LowPart']), int(result['MaxPasswordAge']['HighPart']))
             policy["Domain password information"]["Password properties"] = []
             pw_prop = result['PasswordProperties']
