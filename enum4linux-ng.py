@@ -332,7 +332,7 @@ class Colors(Enum):
     def __call__(self, message):
         if GLOBAL_COLORS:
             return f"{self.value}{message}\033[0m"
-        return msg
+        return message
 
 class Result:
     '''
