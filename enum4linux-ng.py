@@ -81,7 +81,7 @@
 
 from argparse import ArgumentParser
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 import json
 import os
 import random
@@ -2660,8 +2660,7 @@ class EnumPolicy():
         '''
         Converts various values retrieved via the SAMR named pipe into human readable strings.
         '''
-        time = ""
-        tmp = 0
+        seconds = 0
 
         if low == 0 and hex(high) == "-0x80000000":
             return "not set"
@@ -2675,38 +2674,35 @@ class EnumPolicy():
                 high = abs(high)
                 low = abs(low)
 
-            tmp = low + (high)*16**8  # convert to 64bit int
-            tmp *= (1e-7)  # convert to seconds
+            seconds = low + (high)*16**8  # convert to 64bit int
+            seconds *= (1e-7)  # convert to seconds
         else:
-            tmp = abs(high) * (1e-7)
+            seconds = abs(high) * (1e-7)
 
         try:
-            dt = datetime.fromtimestamp(tmp, tz=timezone.utc)
-            minutes = dt.minute
-            hours = dt.hour
-            time_diff = dt - datetime.fromtimestamp(0, tz=timezone.utc)
-            days = time_diff.days
-            years = dt.year - 1970
-        except:
-            return "invalid time"
+            '''
+            the value of `seconds` represent a duration, not an specific point in time.
+            hence, we should use `datetime.timedelta` not `datetime.datetime` to parse the value.
 
-        if days > 1:
-            time += f"{days} days "
-        elif days == 1:
-            time += f"{days} day "
-        if years == 1:
-            time += f"({years} year) "
-        elif years > 1:
-            time += f"({years} years) "
-        if hours > 1:
-            time += f"{hours} hours "
-        elif hours == 1:
-            time += f"{hours} hour "
-        if minutes > 1:
-            time += f"{minutes} minutes"
-        elif minutes == 1:
-            time += f"{minutes} minute"
-        return time.rstrip()
+            > "A timedelta object represents a duration, the difference between two datetime or date instances."
+            > -- https://docs.python.org/3/library/datetime.html#datetime.timedelta
+
+            > "fromtimestamp() may raise OverflowError, if the timestamp is out of the range of values supported by the platform C localtime() or gmtime() functions,
+              and OSError on localtime() or gmtime() failure.
+              It’s common for this to be restricted to years in 1970 through 2038."
+            > -- https://docs.python.org/3/library/datetime.html#datetime.datetime.fromtimestamp
+
+            properties like maximum/minimum password age can theoretically be set to 10675199 days (29247 years).
+            https://learn.microsoft.com/en-us/powershell/module/activedirectory/set-addefaultdomainpasswordpolicy?view=windowsserver2025-ps#-maxpasswordage
+            '''
+
+            duration = timedelta(seconds=seconds)
+        except:
+            # at least return the number of seconds
+            return f"{seconds} seconds"
+
+        # `str(timedelta)` returns a string in the form [D day[s], ][H]H:MM:SS[.UUUUUU].
+        return f"{str(duration)} (hours:minutes:seconds)"
 
 ### Printer Enumeration
 
