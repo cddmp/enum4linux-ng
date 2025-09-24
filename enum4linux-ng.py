@@ -566,7 +566,7 @@ class SAMR(DceRpc):
         self._server_handle = self._get_server_handle()
 
     def _get_server_handle(self):
-        # TODO: Investigate on the various hSamrConnect{0,2,3,4,5}() functions - hSamrConnect results in STATUS_ACCESS_DENIED on old machines
+        # TODO: Investigate on the various hSamrConnect{_,2,3,4,5}() functions - hSamrConnect() results in STATUS_ACCESS_DENIED on old machines
         resp = samr.hSamrConnect2(self.dce)
         return resp['ServerHandle']
 
