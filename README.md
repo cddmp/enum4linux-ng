@@ -25,6 +25,7 @@ I made it for educational purposes for myself and to overcome issues with enum4l
 
 ## Differences
 Some things are implemented differently compared to the original enum4linux. These are the important differences:
+- group members are not enumerated by default, this can be enabled with ````-Gm````
 - RID cycling is not part of the default enumeration (```-A```) but can be enabled with ```-R```
 - RID cycling can be achieved faster, by grouping multiple SID lookups in the same rpcclient call
 - parameter naming is slightly different (e.g. ```-A``` instead of ```-a```)
