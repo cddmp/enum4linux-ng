@@ -40,6 +40,8 @@ In addition, I'd like to thank and give credit to:
 
 It was lots of fun reading your code! :)
 
+Last but not least, I’d like to thank the various people who contributed code, reported issues, and provided helpful suggestions on how to improve the tool.
+
 ## Legal note
 If you use the tool: Don't use it for illegal purposes.
 
