@@ -3303,7 +3303,7 @@ def check_arguments():
     parser.add_argument("-O", action="store_true", help="Get OS information via RPC")
     parser.add_argument("-L", action="store_true", help="Get additional domain info via LDAP/LDAPS (for DCs only)")
     parser.add_argument("-I", action="store_true", help="Get printer information via RPC")
-    parser.add_argument("-R", default=0, const=1, nargs='?', metavar="BULK_SIZE", type=int, help="Enumerate users via RID cycling. Optionally, specifies lookup request size.")
+    parser.add_argument("-R", default=0, const=1, nargs='?', metavar="BULK_SIZE", type=int, help="Enumerate users via RID cycling. Optionally specify the lookup request size (BULK_SIZE).")
     parser.add_argument("-N", action="store_true", help="Do an NetBIOS names lookup (similar to nbtstat) and try to retrieve workgroup from output")
     parser.add_argument("-w", dest="domain", default='', type=str, help="Specify workgroup/domain manually (usually found automatically)")
     parser.add_argument("-u", dest="user", default='', type=str, help="Specify username to use (default \"\")")
