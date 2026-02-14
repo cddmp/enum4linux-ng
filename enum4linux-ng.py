@@ -3151,6 +3151,16 @@ def valid_domain(domain):
         return True
     return False
 
+def valid_path(path):
+    basename = os.path.basename(path)
+    directory = os.path.dirname(path)
+    if os.path.isdir(directory) and os.access(directory, os.W_OK):
+        if basename:
+            return Result(True, '')
+        else:
+            return Result(False, f'Please add an output file name, only an output directory {path} was specified')
+    return Result(False, f'The given output directory {path} does not exist or is not writable')
+
 def valid_file(file, mode=None):
     if not os.path.exists(file):
         return Result(False, f'File {file} does not exist')
@@ -3370,6 +3380,12 @@ def check_arguments():
     if not valid_value(args.timeout, (1,600)):
         raise RuntimeError("Timeout must be a valid integer in the range 1-600")
     args.timeout = int(args.timeout)
+
+    # Write permission check when using -oY and -oJ
+    if args.out_file or args.out_yaml_file or args.out_json_file:
+        result = valid_path(args.out_file or args.out_yaml_file or args.out_json_file)
+        if not result.retval:
+            raise RuntimeError(result.retmsg)
 
     # Perform Samba version checks - TODO: Can be removed in the future
     samba_version = re.match(r".*(\d+\.\d+\.\d+).*", check_output(["smbclient", "--version"]).decode()).group(1)
