@@ -873,7 +873,7 @@ class Output:
         if not os.access(directory, os.W_OK):
             raise ValueError( f'The given output directory {directory} is not writable')
         if not basename:
-            raise ValueError(f'Please add an output file name, only an output directory {directory} was specified')
+            raise ValueError(f'Please add an output file name, only an output directory {self.out_file} was specified')
         if 'json' in self.out_file_type and os.path.exists(f'{self.out_file}.json') and not os.access(f'{self.out_file}.json', os.W_OK):
             raise ValueError(f'The given output file {self.out_file}.json exists, but is not writable')
         if 'yaml' in self.out_file_type and os.path.exists(f'{self.out_file}.yaml') and not os.access(f'{self.out_file}.yaml', os.W_OK):
