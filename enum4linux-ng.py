@@ -811,6 +811,7 @@ class Output:
         self.out_file = out_file
         self.out_file_type = out_file_type
         self.out_dict = OrderedDict({"errors":{}})
+        self._validate()
 
     def update(self, content):
         # The following is needed, since python3 does not support nested merge of
@@ -862,6 +863,21 @@ class Output:
         except OSError:
             return False
         return True
+
+    def _validate(self):
+        basename = os.path.basename(self.out_file)
+        directory = os.path.dirname(self.out_file)
+
+        if not os.path.isdir(directory):
+            raise ValueError( f'The given output directory {directory} does not exist')
+        if not os.access(directory, os.W_OK):
+            raise ValueError( f'The given output directory {directory} is not writable')
+        if not basename:
+            raise ValueError(f'Please add an output file name, only an output directory {directory} was specified')
+        if 'json' in self.out_file_type and os.path.exists(f'{self.out_file}.json') and not os.access(f'{self.out_file}.json', os.W_OK):
+            raise ValueError(f'The given output file {self.out_file}.json exists, but is not writable')
+        if 'yaml' in self.out_file_type and os.path.exists(f'{self.out_file}.yaml') and not os.access(f'{self.out_file}.yaml', os.W_OK):
+            raise ValueError(f'The given output file {self.out_file}.yaml exists, but is not writable')
 
     def as_dict(self):
         return self.out_dict
@@ -2822,14 +2838,17 @@ class Enumerator():
     def __init__(self, args):
 
         # Init output files
-        if args.out_json_file:
-            output = Output(args.out_json_file, "json")
-        elif args.out_yaml_file:
-            output = Output(args.out_yaml_file, "yaml")
-        elif args.out_file:
-            output = Output(args.out_file, "json_yaml")
-        else:
-            output = Output()
+        try:
+            if args.out_json_file:
+                output = Output(args.out_json_file, "json")
+            elif args.out_yaml_file:
+                output = Output(args.out_yaml_file, "yaml")
+            elif args.out_file:
+                output = Output(args.out_file, "json_yaml")
+            else:
+                output = Output()
+        except Exception as e:
+            raise RuntimeError(str(e))
 
         # Init target and creds
         try:
@@ -3151,16 +3170,6 @@ def valid_domain(domain):
         return True
     return False
 
-def valid_path(path):
-    basename = os.path.basename(path)
-    directory = os.path.dirname(path)
-    if os.path.isdir(directory) and os.access(directory, os.W_OK):
-        if basename:
-            return Result(True, '')
-        else:
-            return Result(False, f'Please add an output file name, only an output directory {path} was specified')
-    return Result(False, f'The given output directory {path} does not exist or is not writable')
-
 def valid_file(file, mode=None):
     if not os.path.exists(file):
         return Result(False, f'File {file} does not exist')
@@ -3380,12 +3389,6 @@ def check_arguments():
     if not valid_value(args.timeout, (1,600)):
         raise RuntimeError("Timeout must be a valid integer in the range 1-600")
     args.timeout = int(args.timeout)
-
-    # Write permission check when using -oY and -oJ
-    if args.out_file or args.out_yaml_file or args.out_json_file:
-        result = valid_path(args.out_file or args.out_yaml_file or args.out_json_file)
-        if not result.retval:
-            raise RuntimeError(result.retmsg)
 
     # Perform Samba version checks - TODO: Can be removed in the future
     samba_version = re.match(r".*(\d+\.\d+\.\d+).*", check_output(["smbclient", "--version"]).decode()).group(1)
