@@ -811,7 +811,9 @@ class Output:
         self.out_file = out_file
         self.out_file_type = out_file_type
         self.out_dict = OrderedDict({"errors":{}})
-        self._validate()
+
+        if self.out_file:
+            self._validate()
 
     def update(self, content):
         # The following is needed, since python3 does not support nested merge of
